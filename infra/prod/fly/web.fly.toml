@@ -1,0 +1,22 @@
+# fly.io config for apps/web
+# Deploy: fly deploy -c infra/prod/fly/web.fly.toml --dockerfile infra/prod/web/Dockerfile
+
+app = "outboxlab-web"
+primary_region = "iad"
+
+# Dockerfile is passed via the `--dockerfile` flag in the deploy command above.
+
+[env]
+  APP_ENV = "production"
+  PORT = "3000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -1,0 +1,17 @@
+# fly.io config for apps/worker-py
+# Deploy: fly deploy -c infra/prod/fly/worker.fly.toml --dockerfile infra/prod/worker/Dockerfile
+
+app = "outboxlab-worker"
+primary_region = "iad"
+
+# Dockerfile is passed via the `--dockerfile` flag in the deploy command above.
+
+[env]
+  APP_ENV = "production"
+
+# Worker has no public HTTP — no [http_service] block.
+# Entrypoint is the Dockerfile CMD (consistent with api). Step 3 sets the real CMD.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

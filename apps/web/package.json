@@ -1,0 +1,12 @@
+{
+  "name": "@outboxlab/web",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev": "echo 'Next.js scaffold lands on Step 4' && exit 1"
+  }
+}

@@ -1,0 +1,48 @@
+# Env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Local agent config — repo-specific instructions are personal, not for git.
+AGENTS.md
+CLAUDE.md
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+.turbo/
+dist/
+build/
+*.log
+
+# Local TLS (belt and suspenders — directory + any stray cert/key files).
+infra/dev/proxy/certs/
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Tooling
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/

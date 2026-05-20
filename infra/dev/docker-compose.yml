@@ -1,0 +1,100 @@
+name: outboxlab
+
+networks:
+  default:
+    name: outboxlab
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-outboxlab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-outboxlab}
+      POSTGRES_DB: ${POSTGRES_DB:-outboxlab}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-outboxlab} -d ${POSTGRES_DB:-outboxlab}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "127.0.0.1:55432:5432"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/dev/api/Dockerfile
+    restart: unless-stopped
+    env_file: ../../.env
+    environment:
+      APP_ENV: local
+    volumes:
+      - ../../apps/api:/app
+      # /opt/venv is baked into the image (see infra/dev/api/Dockerfile); no
+      # volume mount is needed. Rebuild the image (`make rebuild`) when deps
+      # change in pyproject.toml or uv.lock.
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 60s
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infra/dev/worker/Dockerfile
+    restart: unless-stopped
+    env_file: ../../.env
+    environment:
+      APP_ENV: local
+    volumes:
+      - ../../apps/worker-py:/app
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/dev/web/Dockerfile
+    restart: unless-stopped
+    env_file: ../../.env
+    volumes:
+      # Mount at /srv where Caddy serves from. Step 4 swap to Next.js dev server.
+      - ../../apps/web:/srv
+    expose:
+      - "3000"
+
+  proxy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN must be set in .env}
+      WEB_DOMAIN: ${WEB_DOMAIN:?WEB_DOMAIN must be set in .env}
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./proxy/certs:/certs:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+volumes:
+  pgdata:
