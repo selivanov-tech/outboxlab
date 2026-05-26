@@ -1,0 +1,24 @@
+[project]
+name = "outboxlab-worker"
+version = "0.0.1"
+requires-python = ">=3.14"
+dependencies = [
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "pydantic-settings>=2.6",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.390",
+    "ruff>=0.15",
+]
+
+[tool.pyright]
+include = ["main.py"]
+exclude = ["**/__pycache__", "**/.venv"]
+pythonVersion = "3.14"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = false
+reportMissingImports = "error"
+reportUnusedImport = "warning"

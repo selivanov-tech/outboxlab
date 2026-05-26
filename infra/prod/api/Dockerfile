@@ -24,9 +24,11 @@ RUN uv sync --frozen --no-dev
 # Runtime
 FROM python:3.14-slim AS runtime
 
+ARG GIT_SHA=dev
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    GIT_SHA=${GIT_SHA}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -37,6 +39,11 @@ WORKDIR /app
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app apps/api/app /app/app
+# Migrations + Alembic config travel with the image so the fly
+# release_command (`alembic upgrade head`) can resolve everything from
+# /app — config, env.py, version scripts, and ``import app.*``.
+COPY --chown=app:app apps/api/alembic /app/alembic
+COPY --chown=app:app apps/api/alembic.ini /app/alembic.ini
 
 USER app
 EXPOSE 8000

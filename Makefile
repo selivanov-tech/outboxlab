@@ -15,6 +15,10 @@ define require_domains
 @test -n "$(WEB_DOMAIN)" || { echo "WEB_DOMAIN not set in .env (run: make env, then edit .env)"; exit 1; }
 endef
 
+# CI-facing targets (deploy, check-leaks) live in their own fragment so CI can
+# invoke them standalone with `make -f infra/make/deploy.mk <target>`.
+include infra/make/deploy.mk
+
 .PHONY: help
 help:  ## Show available targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -109,6 +113,50 @@ shell-worker:  ## Open shell in worker container
 shell-db:  ## Open psql in postgres container
 	$(COMPOSE) exec postgres psql -U $${POSTGRES_USER:-outboxlab} -d $${POSTGRES_DB:-outboxlab}
 
+# ---- Database ----
+
+.PHONY: migrate
+migrate:  ## Apply pending migrations against local postgres
+	$(COMPOSE) exec api uv run alembic upgrade head
+
+.PHONY: migration
+migration:  ## Create a new migration (use: make migration name="add foo")
+	@test -n "$(name)" || { echo "Usage: make migration name=\"description\""; exit 1; }
+	$(COMPOSE) exec api uv run alembic revision --autogenerate -m "$(name)"
+
+.PHONY: seed
+seed:  ## Seed default workspace into local DB
+	$(COMPOSE) exec api uv run python -m app.identity.infrastructure.seed
+
+.PHONY: test
+test:  ## Run api tests
+	$(COMPOSE) exec api uv run pytest -q
+
+.PHONY: typecheck
+typecheck:  ## Run pyright on api + worker (inside containers)
+	@echo "==> typecheck api"
+	$(COMPOSE) exec api uv run pyright
+	@echo "==> typecheck worker"
+	$(COMPOSE) exec worker uv run pyright
+
+.PHONY: lint
+lint:  ## Check formatting + lint with ruff, read-only (matches CI)
+	@echo "==> lint api"
+	$(COMPOSE) exec api uv run ruff format --check app tests
+	$(COMPOSE) exec api uv run ruff check app tests
+	@echo "==> lint worker"
+	$(COMPOSE) exec worker uv run ruff format --check main.py
+	$(COMPOSE) exec worker uv run ruff check main.py
+
+.PHONY: format
+format:  ## Auto-format + autofix with ruff (writes changes)
+	@echo "==> format api"
+	$(COMPOSE) exec api uv run ruff format app tests
+	$(COMPOSE) exec api uv run ruff check --fix app tests
+	@echo "==> format worker"
+	$(COMPOSE) exec worker uv run ruff format main.py
+	$(COMPOSE) exec worker uv run ruff check --fix main.py
+
 # ---- Cleanup ----
 
 .PHONY: clean
@@ -118,13 +166,3 @@ clean:  ## Remove containers, networks, volumes
 .PHONY: nuke
 nuke:  ## clean + remove built images
 	$(COMPOSE) down -v --rmi local --remove-orphans
-
-# ---- Guards ----
-
-.PHONY: check-leaks
-check-leaks:  ## Fail if any tracked file leaks local/prod hostnames
-	@if git ls-files -z 2>/dev/null | xargs -0 grep -lEI '\.local\.|\.fly\.dev|ssel\.asia' 2>/dev/null | grep -v '^\.env\.example$$' | grep .; then \
-		echo ""; echo "Hostname leak detected in tracked files. Move domains to .env."; exit 1; \
-	else \
-		echo "No hostname leaks in tracked files."; \
-	fi

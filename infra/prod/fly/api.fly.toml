@@ -11,6 +11,12 @@ primary_region = "iad"
   APP_ENV = "production"
   PORT = "8000"
 
+# Run migrations on every release in a one-off VM. Fails the deploy if
+# alembic exits non-zero, so a broken migration never reaches a serving
+# machine. DATABASE_URL is read from fly secrets.
+[deploy]
+  release_command = "alembic upgrade head"
+
 # During demo week (step 4 Loom) bump min_machines_running = 1 to avoid cold-start
 # latency on the first request after idle.
 [http_service]

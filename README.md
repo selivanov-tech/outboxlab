@@ -45,6 +45,20 @@ before `make certs` so mkcert sees your domains.
 
 Open URLs are printed by `make up` and live only in your `.env`.
 
+After `make up`:
+
+```bash
+make migrate     # apply Alembic migrations to local postgres
+make seed        # insert the default workspace (idempotent)
+make test        # run unit + integration tests
+```
+
+Endpoints (replace with your `API_DOMAIN`):
+
+- `GET /health` — liveness
+- `GET /version` — version + git SHA + APP_ENV
+- `GET /debug/state` — DB ping + workspace count
+
 ## Daily
 
 ```bash
@@ -53,11 +67,61 @@ make logs        # tail
 make ps          # status
 make shell-api   # bash into api
 make shell-db    # psql into postgres
+make migrate     # apply pending Alembic migrations
+make test        # run pytest
 make down        # stop
 make clean       # stop + drop volumes
 ```
 
 `make help` lists everything.
+
+## Adding a migration
+
+```bash
+# edit ORM models in apps/api/app/<bc>/infrastructure/db/models.py
+make migration name="describe the change"
+# review apps/api/alembic/versions/<new_file>.py
+make migrate
+```
+
+Baseline migration is hand-written (`alembic/versions/0001_baseline.py`) so its
+DDL + RLS policies stay reviewable; subsequent migrations use autogenerate.
+
+## RLS app role
+
+The migration assumes a non-superuser role `outboxlab_app` exists at the cluster
+level. Tests `SET LOCAL ROLE outboxlab_app` to exercise RLS policies as a
+non-superuser (FORCE RLS doesn't help under a superuser).
+
+- **Local (compose)**: created automatically by
+  `infra/postgres/bootstrap_app_role.sql`, mounted into the postgres image's
+  `/docker-entrypoint-initdb.d/`. Runs once on an empty data dir, so re-runs
+  need `make clean` first.
+- **CI**: a workflow step pipes the same SQL through `psql` before migrations.
+- **Prod (Neon)**: run the same SQL once against your Neon DB via the Neon SQL
+  editor (or `psql` with the direct URL). Migrations themselves never touch
+  roles, so the runtime app role only needs SELECT/INSERT/UPDATE/DELETE on the
+  schema — no CREATEROLE required.
+
+## Deploy (fly.io)
+
+```bash
+# one-time: bootstrap the app role on Neon (Neon SQL editor or psql).
+psql "$NEON_DIRECT_URL" -f infra/postgres/bootstrap_app_role.sql
+
+# one-time: point fly at Neon. Use the direct (non-pooler) URL for migrations.
+fly secrets set -a outboxlab-api DATABASE_URL="postgresql+asyncpg://<neon-url>"
+
+# every deploy
+fly deploy \
+  -c infra/prod/fly/api.fly.toml \
+  --dockerfile infra/prod/api/Dockerfile \
+  --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+```
+
+The `[deploy] release_command` in `api.fly.toml` runs `alembic upgrade head`
+in a one-off VM before serving machines start, so a broken migration fails
+the deploy rather than reaching live traffic.
 
 ## Package managers
 
