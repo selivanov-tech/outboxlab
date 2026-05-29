@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl ca-certificates build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-ARG UV_VERSION=0.11.15
+ARG UV_VERSION=0.11.17
 RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh && \
     ln -s /root/.local/bin/uv /usr/local/bin/uv
 
