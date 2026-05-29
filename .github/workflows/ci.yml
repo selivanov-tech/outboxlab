@@ -30,6 +30,8 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://outboxlab:outboxlab@localhost:55432/outboxlab
       APP_ENV: ci
+      # Settings requires api_domain; CI never serves traffic, so a placeholder is fine.
+      API_DOMAIN: localhost
     defaults:
       run:
         working-directory: apps/api
