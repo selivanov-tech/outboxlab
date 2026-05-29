@@ -22,6 +22,7 @@ contracts/     event JSON Schemas (versioned)
 infra/
   dev/         docker-compose + dev Dockerfiles + Caddy proxy
   prod/        prod Dockerfiles + fly.toml
+  make/        shared make fragments (deploy.mk)
 docs/          ADRs
 ```
 
@@ -51,6 +52,7 @@ After `make up`:
 make migrate     # apply Alembic migrations to local postgres
 make seed        # insert the default workspace (idempotent)
 make test        # run unit + integration tests
+make lint        # ruff format-check + lint (same as CI)
 ```
 
 Endpoints (replace with your `API_DOMAIN`):
@@ -69,6 +71,9 @@ make shell-api   # bash into api
 make shell-db    # psql into postgres
 make migrate     # apply pending Alembic migrations
 make test        # run pytest
+make typecheck   # pyright (api + worker)
+make lint        # check format + lint with ruff
+make format      # auto-format + autofix with ruff (writes changes)
 make down        # stop
 make clean       # stop + drop volumes
 ```
@@ -103,20 +108,46 @@ non-superuser (FORCE RLS doesn't help under a superuser).
   roles, so the runtime app role only needs SELECT/INSERT/UPDATE/DELETE on the
   schema — no CREATEROLE required.
 
+## CI
+
+GitHub Actions runs on every PR:
+
+- **api-tests** — Postgres 17 service, app-role bootstrap, migrations, seed, pytest.
+- **typecheck** — pyright on api + worker.
+- **lint** — ruff `format --check` + `check` on api + worker (pinned 0.15.15).
+- **leak-check** — fails if a tracked file leaks a hostname.
+
+On merge to `main`, the **deploy-api** job ships the api to fly.io. It runs only
+after all four checks pass (`needs:`) and inside the `production` environment.
+
+One-time setup: add a fly deploy token as the `FLY_API_TOKEN` secret (repo or
+the `production` environment):
+
+```bash
+fly tokens create deploy -a outboxlab-api
+```
+
+The CI-facing targets (`deploy`, `check-leaks`) live in `infra/make/deploy.mk`
+so CI calls them standalone; the dev Makefile includes the same file, so
+`make deploy` / `make check-leaks` still work locally.
+
 ## Deploy (fly.io)
+
+Merging to `main` auto-deploys through the CI **deploy-api** job. To deploy by
+hand:
 
 ```bash
 # one-time: bootstrap the app role on Neon (Neon SQL editor or psql).
 psql "$NEON_DIRECT_URL" -f infra/postgres/bootstrap_app_role.sql
 
-# one-time: point fly at Neon. Use the direct (non-pooler) URL for migrations.
-fly secrets set -a outboxlab-api DATABASE_URL="postgresql+asyncpg://<neon-url>"
+# one-time: point fly at Neon (direct, non-pooler URL for migrations) and set
+# the API domain — Settings requires it, and the release migration builds it.
+fly secrets set -a outboxlab-api \
+  DATABASE_URL="postgresql+asyncpg://<neon-url>" \
+  API_DOMAIN="<your-api-domain>"
 
-# every deploy
-fly deploy \
-  -c infra/prod/fly/api.fly.toml \
-  --dockerfile infra/prod/api/Dockerfile \
-  --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+# every deploy (wraps fly deploy; see infra/make/deploy.mk)
+make deploy
 ```
 
 The `[deploy] release_command` in `api.fly.toml` runs `alembic upgrade head`
