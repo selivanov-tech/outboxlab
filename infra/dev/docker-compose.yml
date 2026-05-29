@@ -14,6 +14,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-outboxlab}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # docker-entrypoint-initdb.d runs *.sql on an empty data dir only.
+      # `make clean` wipes pgdata so this re-runs on next `make up`.
+      - ../postgres/bootstrap_app_role.sql:/docker-entrypoint-initdb.d/01-bootstrap-app-role.sql:ro
     healthcheck:
       test:
         [
@@ -61,7 +64,7 @@ services:
       APP_ENV: local
     volumes:
       - ../../apps/worker-py:/app
-      - /app/.venv
+      # /opt/venv is baked into the image (see infra/dev/worker/Dockerfile).
     depends_on:
       postgres:
         condition: service_healthy
