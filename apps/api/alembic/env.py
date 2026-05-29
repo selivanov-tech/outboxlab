@@ -4,10 +4,11 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import get_settings
 from app.shared.infrastructure.db.base import Base
+from app.shared.infrastructure.db.engine import asyncpg_url_and_connect_args
 
 # Imports below are load-bearing: importing a model module registers its
 # tables on Base.metadata. Do not "clean up" these as unused.
@@ -17,7 +18,6 @@ from app.identity.infrastructure.db import models as _identity_models  # noqa: F
 config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 
 async def _run_migrations() -> None:
@@ -26,10 +26,11 @@ async def _run_migrations() -> None:
         with context.begin_transaction():
             context.run_migrations()
 
-    engine = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    url, connect_args = asyncpg_url_and_connect_args(get_settings().database_url)
+    engine = create_async_engine(
+        url,
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     async with engine.connect() as connection:
         await connection.run_sync(run_sync)
