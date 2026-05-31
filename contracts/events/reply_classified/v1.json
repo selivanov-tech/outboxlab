@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "outboxlab/events/reply_classified/v1",
+  "title": "ReplyClassified",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_type", "workspace_id", "inbound_id", "intent"],
+  "properties": {
+    "event_type": { "const": "ReplyClassified" },
+    "workspace_id": { "type": "string", "format": "uuid" },
+    "inbound_id": { "type": "string", "format": "uuid" },
+    "intent": {
+      "type": "string",
+      "enum": ["positive", "negative", "ooo", "unsubscribe", "unclear"]
+    }
+  }
+}

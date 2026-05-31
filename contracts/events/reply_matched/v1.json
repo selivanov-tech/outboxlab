@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "outboxlab/events/reply_matched/v1",
+  "title": "ReplyMatched",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_type",
+    "workspace_id",
+    "inbound_id",
+    "matched_outbound_id",
+    "provider_thread_id"
+  ],
+  "properties": {
+    "event_type": { "const": "ReplyMatched" },
+    "workspace_id": { "type": "string", "format": "uuid" },
+    "inbound_id": { "type": "string", "format": "uuid" },
+    "matched_outbound_id": { "type": "string", "format": "uuid" },
+    "provider_thread_id": { "type": "string" }
+  }
+}

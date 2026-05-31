@@ -12,8 +12,10 @@ from app.shared.infrastructure.db.engine import asyncpg_url_and_connect_args
 
 # Imports below are load-bearing: importing a model module registers its
 # tables on Base.metadata. Do not "clean up" these as unused.
-from app.campaign.infrastructure.db import models as _campaign_models  # noqa: F401
-from app.identity.infrastructure.db import models as _identity_models  # noqa: F401
+from app.contexts.campaign.infrastructure.db import models as _campaign_models  # noqa: F401
+from app.contexts.identity.infrastructure.db import models as _identity_models  # noqa: F401
+from app.contexts.mailbox.infrastructure.db import models as _mailbox_models  # noqa: F401
+from app.contexts.messaging.infrastructure.db import models as _messaging_models  # noqa: F401
 
 config = context.config
 if config.config_file_name:

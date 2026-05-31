@@ -8,5 +8,5 @@ async def test_empty_workspace_guc_does_not_crash_tenant_query(
     await session.execute(text("SET LOCAL ROLE outboxlab_app"))
     await session.execute(text("SELECT set_config('app.workspace_id', '', true)"))
 
-    result = await session.execute(text("SELECT COUNT(*) FROM campaigns"))
+    result = await session.execute(text("SELECT COUNT(*) FROM campaign__campaigns"))
     assert result.scalar_one() == 0

@@ -57,14 +57,16 @@ services:
   worker:
     build:
       context: ../..
-      dockerfile: infra/dev/worker/Dockerfile
+      dockerfile: infra/dev/api/Dockerfile
     restart: unless-stopped
     env_file: ../../.env
     environment:
       APP_ENV: local
+    # Shares the api image + source; runs the worker entrypoint instead of the API.
+    command:
+      ["sh", "-c", "uv sync && exec uv run python -m app.entrypoints.worker"]
     volumes:
-      - ../../apps/worker-py:/app
-      # /opt/venv is baked into the image (see infra/dev/worker/Dockerfile).
+      - ../../apps/api:/app
     depends_on:
       postgres:
         condition: service_healthy

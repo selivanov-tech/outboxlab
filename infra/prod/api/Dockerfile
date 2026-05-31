@@ -48,4 +48,4 @@ COPY --chown=app:app apps/api/alembic.ini /app/alembic.ini
 USER app
 EXPOSE 8000
 
-CMD ["fastapi", "run", "app/main.py"]
+CMD ["fastapi", "run", "app/entrypoints/api.py"]

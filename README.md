@@ -5,7 +5,7 @@ Mini cold-email outreach infrastructure. Built as a 7-step proof-of-work sprint 
 ## Stack
 
 - API: FastAPI (Python 3.14, uv, SQLAlchemy 2.0 async, Pydantic v2)
-- Worker: Python (sender + IMAP poller). Go extraction in phase 2.
+- Worker: Python Gmail poller — part of the api project (`apps/api/app/entrypoints/worker.py`, run as `python -m app.entrypoints.worker`); own process + fly app, same image. Go sender extraction in phase 2.
 - Web: Next.js minimal state viewer.
 - DB: local postgres (dev) / Neon (prod).
 - Queue / cache / rate-limit: postgres-only (`SELECT FOR UPDATE SKIP LOCKED` + advisory locks).
@@ -15,8 +15,7 @@ Mini cold-email outreach infrastructure. Built as a 7-step proof-of-work sprint 
 
 ```
 apps/
-  api/         FastAPI
-  worker-py/   sender + IMAP poller
+  api/         FastAPI; app/contexts/<bc> (modules) · app/shared · app/entrypoints (api/worker/seed)
   web/         state viewer
 contracts/     event JSON Schemas (versioned)
 infra/
@@ -71,7 +70,7 @@ make shell-api   # bash into api
 make shell-db    # psql into postgres
 make migrate     # apply pending Alembic migrations
 make test        # run pytest
-make typecheck   # pyright (api + worker)
+make typecheck   # pyright (api)
 make lint        # check format + lint with ruff
 make format      # auto-format + autofix with ruff (writes changes)
 make down        # stop
@@ -83,7 +82,7 @@ make clean       # stop + drop volumes
 ## Adding a migration
 
 ```bash
-# edit ORM models in apps/api/app/<bc>/infrastructure/db/models.py
+# edit ORM models in apps/api/app/contexts/<bc>/infrastructure/db/models.py
 make migration name="describe the change"
 # review apps/api/alembic/versions/<new_file>.py
 make migrate
@@ -113,8 +112,8 @@ non-superuser (FORCE RLS doesn't help under a superuser).
 GitHub Actions runs on every PR:
 
 - **api-tests** — Postgres 17 service, app-role bootstrap, migrations, seed, pytest.
-- **typecheck** — pyright on api + worker.
-- **lint** — ruff `format --check` + `check` on api + worker (pinned 0.15.15).
+- **typecheck** — pyright on api (the worker lives in the api project).
+- **lint** — ruff `format --check` + `check` on api (pinned 0.15.15).
 - **leak-check** — fails if a tracked file leaks a hostname.
 
 On merge to `main`, the **deploy-api** job ships the api to fly.io. It runs only

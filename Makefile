@@ -125,37 +125,31 @@ migration:  ## Create a new migration (use: make migration name="add foo")
 	$(COMPOSE) exec api uv run alembic revision --autogenerate -m "$(name)"
 
 .PHONY: seed
-seed:  ## Seed default workspace into local DB
-	$(COMPOSE) exec api uv run python -m app.identity.infrastructure.seed
+seed:  ## Seed default workspace + mailbox into local DB
+	$(COMPOSE) exec api uv run python -m app.entrypoints.seed
 
 .PHONY: test
 test:  ## Run api tests
 	$(COMPOSE) exec api uv run pytest -q
 
 .PHONY: typecheck
-typecheck:  ## Run pyright on api + worker (inside containers)
-	@echo "==> typecheck api"
+typecheck:  ## Run pyright on api (worker code lives in the api project)
 	$(COMPOSE) exec api uv run pyright
-	@echo "==> typecheck worker"
-	$(COMPOSE) exec worker uv run pyright
 
 .PHONY: lint
 lint:  ## Check formatting + lint with ruff, read-only (matches CI)
-	@echo "==> lint api"
 	$(COMPOSE) exec api uv run ruff format --check app tests
 	$(COMPOSE) exec api uv run ruff check app tests
-	@echo "==> lint worker"
-	$(COMPOSE) exec worker uv run ruff format --check main.py
-	$(COMPOSE) exec worker uv run ruff check main.py
 
 .PHONY: format
 format:  ## Auto-format + autofix with ruff (writes changes)
-	@echo "==> format api"
 	$(COMPOSE) exec api uv run ruff format app tests
 	$(COMPOSE) exec api uv run ruff check --fix app tests
-	@echo "==> format worker"
-	$(COMPOSE) exec worker uv run ruff format main.py
-	$(COMPOSE) exec worker uv run ruff check --fix main.py
+
+.PHONY: ready
+ready: check-leaks lint typecheck test  ## Pre-commit gate: leaks + ruff + pyright + tests
+	@echo ""
+	@echo "ready: all checks passed."
 
 # ---- Cleanup ----
 
