@@ -3,7 +3,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
-from app.identity.domain.workspace import Workspace
+from app.contexts.identity.domain.workspace import Workspace
 from app.shared.util.clock import now
 
 

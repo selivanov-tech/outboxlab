@@ -32,6 +32,7 @@ jobs:
       APP_ENV: ci
       # Settings requires api_domain; CI never serves traffic, so a placeholder is fine.
       API_DOMAIN: localhost
+      MAILBOX_WORKSPACE_ID: 019e5f2a-1a6d-7fa2-8bee-55d3e1ccdc3d
     defaults:
       run:
         working-directory: apps/api
@@ -58,14 +59,14 @@ jobs:
       - name: Apply migrations
         run: uv run alembic upgrade head
 
-      - name: Seed default workspace
-        run: uv run python -m app.identity.infrastructure.seed
+      - name: Seed default workspace + mailbox
+        run: uv run python -m app.entrypoints.seed
 
       - name: Run tests
         run: uv run pytest -q
 
   typecheck:
-    name: api + worker — pyright
+    name: api — pyright
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -83,16 +84,8 @@ jobs:
         working-directory: apps/api
         run: uv run pyright
 
-      - name: Sync worker deps
-        working-directory: apps/worker-py
-        run: uv sync --frozen
-
-      - name: Pyright worker
-        working-directory: apps/worker-py
-        run: uv run pyright
-
   lint:
-    name: api + worker — ruff
+    name: api — ruff
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -111,16 +104,6 @@ jobs:
         run: |
           uv run ruff format --check app tests
           uv run ruff check app tests
-
-      - name: Sync worker deps
-        working-directory: apps/worker-py
-        run: uv sync --frozen
-
-      - name: Ruff worker
-        working-directory: apps/worker-py
-        run: |
-          uv run ruff format --check main.py
-          uv run ruff check main.py
 
   leak-check:
     name: tracked-files hostname leak check

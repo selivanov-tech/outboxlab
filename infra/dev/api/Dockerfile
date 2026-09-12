@@ -31,4 +31,4 @@ WORKDIR /app
 # Source is bind-mounted from apps/api/. CMD re-runs uv sync as a no-op when
 # the lock matches what was baked into the image; updates the venv if it
 # doesn't (e.g. after `uv add` without a rebuild).
-CMD ["sh", "-c", "uv sync && exec uv run fastapi dev app/main.py --host 0.0.0.0"]
+CMD ["sh", "-c", "uv sync && exec uv run fastapi dev app/entrypoints/api.py --host 0.0.0.0"]

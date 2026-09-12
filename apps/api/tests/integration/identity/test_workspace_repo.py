@@ -2,8 +2,10 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.identity.domain.workspace import Workspace
-from app.identity.infrastructure.persistence.workspace_repo import WorkspaceRepository
+from app.contexts.identity.domain.workspace import Workspace
+from app.contexts.identity.infrastructure.persistence.workspace_repo import (
+    WorkspaceRepository,
+)
 
 
 async def test_add_and_fetch_roundtrip(session: AsyncSession) -> None:

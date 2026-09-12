@@ -1,16 +1,22 @@
-# fly.io config for apps/worker-py
-# Deploy: fly deploy -c infra/prod/fly/worker.fly.toml --dockerfile infra/prod/worker/Dockerfile
+# fly.io config for the worker (Gmail poller).
+# Shares the api image. Deploy:
+#   fly deploy -c infra/prod/fly/worker.fly.toml --dockerfile infra/prod/api/Dockerfile
+#
+# Required fly secrets (fly secrets set ... -a outboxlab-worker):
+#   DATABASE_URL, API_DOMAIN, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+#   GOOGLE_REFRESH_TOKEN, GMAIL_USER_EMAIL, MAILBOX_WORKSPACE_ID
+# Optional: LLM_ENABLED, ANTHROPIC_API_KEY
 
 app = "outboxlab-worker"
 primary_region = "iad"
 
-# Dockerfile is passed via the `--dockerfile` flag in the deploy command above.
-
 [env]
   APP_ENV = "production"
 
-# Worker has no public HTTP — no [http_service] block.
-# Entrypoint is the Dockerfile CMD (consistent with api). Step 3 sets the real CMD.
+# No [http_service] — the worker has no public HTTP. Override the image CMD
+# (api's `fastapi run`) with the worker entrypoint via a process group.
+[processes]
+  app = "python -m app.entrypoints.worker"
 
 [[vm]]
   size = "shared-cpu-1x"

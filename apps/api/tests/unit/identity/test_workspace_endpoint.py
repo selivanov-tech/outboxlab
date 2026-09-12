@@ -5,10 +5,14 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-from app.identity.application.queries.get_my_workspace import WorkspaceNotFoundError
-from app.identity.domain.workspace import Workspace
-from app.identity.presentation.routes.workspaces import get_my_workspace_handler
-from app.main import app
+from app.contexts.identity.application.queries.get_my_workspace import (
+    WorkspaceNotFoundError,
+)
+from app.contexts.identity.domain.workspace import Workspace
+from app.contexts.identity.presentation.routes.workspaces import (
+    get_my_workspace_handler,
+)
+from app.entrypoints.api import app
 from app.shared.util.clock import now
 
 

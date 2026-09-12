@@ -1,9 +1,11 @@
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.campaign.infrastructure.db.models import Campaign
-from app.identity.domain.workspace import Workspace
-from app.identity.infrastructure.persistence.workspace_repo import WorkspaceRepository
+from app.contexts.campaign.infrastructure.db.models import Campaign
+from app.contexts.identity.domain.workspace import Workspace
+from app.contexts.identity.infrastructure.persistence.workspace_repo import (
+    WorkspaceRepository,
+)
 
 
 async def _set_workspace(session: AsyncSession, ws_id: str) -> None:
@@ -34,7 +36,11 @@ async def test_workspace_isolation_on_campaigns(session: AsyncSession) -> None:
 
     await _set_workspace(session, str(ws_a.id))
     visible = (
-        (await session.execute(text("SELECT name FROM campaigns ORDER BY name")))
+        (
+            await session.execute(
+                text("SELECT name FROM campaign__campaigns ORDER BY name")
+            )
+        )
         .scalars()
         .all()
     )
@@ -42,7 +48,11 @@ async def test_workspace_isolation_on_campaigns(session: AsyncSession) -> None:
 
     await _set_workspace(session, str(ws_b.id))
     visible = (
-        (await session.execute(text("SELECT name FROM campaigns ORDER BY name")))
+        (
+            await session.execute(
+                text("SELECT name FROM campaign__campaigns ORDER BY name")
+            )
+        )
         .scalars()
         .all()
     )
