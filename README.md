@@ -61,19 +61,21 @@ infra/
   dev/           docker-compose + dev Dockerfiles + Caddy proxy
   prod/          prod Dockerfiles + fly.toml
   make/          shared make fragments (deploy.mk)
-docs/            reserved for ADRs (empty so far)
+docs/            plan (one page per step), architecture notes, ADRs
 ```
 
 ## Roadmap
 
-1. ~~Step 0 — local dev stack, Fly deploy path~~
-2. ~~Step 1 — walking skeleton: identity context, workspaces, CI, live URL~~
-3. ~~Step 2 — real email loop: Gmail send, inbox polling, reply matching, intent classification, outbox~~
-4. Step 3 — campaign state machine: a classified reply pauses the lead and cancels future sends; bounce as a first-class signal feeding suppression; per-mailbox daily send caps.
-5. Step 4 — hardening, demo, README v2.
-6. Step 5 — Go sender extraction behind the same port.
-7. Step 6 — MCP server over the API (OpenAPI-as-MCP).
-8. Step 7 — observability.
+The full plan, one page per step, lives in [`docs/plan/`](docs/plan/README.md). Decisions are recorded in [`docs/adr/`](docs/adr/README.md); the context map and infrastructure notes in [`docs/architecture/`](docs/architecture/overview.md).
+
+1. ~~[Step 0](docs/plan/step-0-local-dev-stack.md) — local dev stack, Fly deploy path~~
+2. ~~[Step 1](docs/plan/step-1-walking-skeleton.md) — walking skeleton: identity context, workspaces, CI, live URL~~
+3. ~~[Step 2](docs/plan/step-2-real-email-loop.md) — real email loop: Gmail send, inbox polling, reply matching, intent classification, outbox~~
+4. [Step 3](docs/plan/step-3-campaign-state-machine.md) — campaign state machine: a classified reply pauses the lead and cancels future sends; bounce as a first-class signal feeding suppression; per-mailbox daily send caps.
+5. [Step 4](docs/plan/step-4-hardening-and-demo.md) — hardening, demo, README v1.
+6. [Step 5](docs/plan/step-5-go-sender-extraction.md) — Go sender extraction behind the same port.
+7. [Step 6](docs/plan/step-6-mcp-server.md) — MCP server over the API (OpenAPI-as-MCP).
+8. [Step 7](docs/plan/step-7-observability.md) — observability, README v2.
 
 ## First-time setup
 
