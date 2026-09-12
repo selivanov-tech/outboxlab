@@ -97,7 +97,7 @@ Services: `proxy` (Caddy with local HTTPS), `api`, `worker`, `web`, `postgres`.
 
 **Local domains**
 
-- Pattern: `{service}.{project}.{env}.<your-domain>`, for example `api.<project>.local.<your-domain>` → `127.0.0.1`.
+- Pattern: `{service}.{project}.{env}.<your-domain>`, for example `api.<project>.<env>.<your-domain>` → `127.0.0.1` for the local environment.
 - Google OAuth web redirect URIs need a public top-level domain, so `.test` / `.localhost` do not work for the callback.
 - TLS via `mkcert` (`make certs`); hosts entries via `make hosts-add`.
 - Domains never appear in tracked files: `make check-leaks` (also a CI job) fails the build if they do.
