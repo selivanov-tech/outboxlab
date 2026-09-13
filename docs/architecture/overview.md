@@ -11,7 +11,7 @@ apps/api/app/
     application/          use cases (commands / queries / handlers) and ports (Protocols)
     infrastructure/       adapters: SQLAlchemy models + repositories, Gmail, LLM clients, outbox writer
     presentation/         FastAPI routes for this context
-  shared/                 cross-cutting: DB engine, clock, request context, debug/health/version routes
+  shared/                 cross-cutting: DB engine, clock, request context, auth middleware, debug/health/version routes, the static viewer
   entrypoints/            process roots that cross context borders: api.py, worker.py, seed.py
   config.py               Settings (pydantic-settings)
 contracts/events/         versioned JSON Schemas for outbox events
@@ -28,12 +28,12 @@ Rules:
 
 | Context | Owns | State |
 |---|---|---|
-| `identity` | workspaces — the tenant registry, deliberately outside RLS so tenants can be listed | built (Step 1) |
+| `identity` | workspaces — the tenant registry, deliberately outside RLS so tenants can be listed — and workspace API keys | built (Steps 1, 4) |
 | `mailbox` | the connected Gmail mailbox, its address and sync cursor | built (Step 2) |
 | `messaging` | outbound and inbound messages, reply matching, intent classification, bounce detection, suppressions, sending guards, outbox events | built (Steps 2–3) |
 | `campaign` | campaigns, sequence steps, leads and their state machine, the send-job queue, the reply consumer | built (Step 3) |
 
-Tenancy: every tenant table has row-level security keyed by the session GUC `app.workspace_id`. The API sets it from the `X-Workspace-Id` header; the worker sets it from `MAILBOX_WORKSPACE_ID`. Tests run as the non-superuser role `outboxlab_app` so the policies are actually exercised.
+Tenancy: every tenant table has row-level security keyed by the session GUC `app.workspace_id`. The API sets it from the workspace resolved from an API key (`Authorization: Bearer`); outside production the `X-Workspace-Id` header is also accepted ([ADR 0017](../adr/0017-workspace-api-keys.md)). The worker sets it from `MAILBOX_WORKSPACE_ID`. Tests run as the non-superuser role `outboxlab_app` so the policies are actually exercised.
 
 ## Target context map
 

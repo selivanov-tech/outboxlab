@@ -1,6 +1,10 @@
+import uuid
+
 from fastapi.testclient import TestClient
 
 from app.entrypoints.api import app
+
+WORKSPACE_ID = str(uuid.uuid7())
 
 
 def test_health_endpoint() -> None:
@@ -10,25 +14,23 @@ def test_health_endpoint() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_debug_state_reports_db_ok_and_workspace_count() -> None:
+def test_debug_state_requires_credentials() -> None:
     with TestClient(app) as client:
         response = client.get("/debug/state")
+    assert response.status_code == 401
+
+
+def test_debug_state_is_scoped_to_the_workspace() -> None:
+    with TestClient(app) as client:
+        response = client.get("/debug/state", headers={"X-Workspace-Id": WORKSPACE_ID})
     assert response.status_code == 200
     body = response.json()
     assert body["db"] == "ok"
-    assert isinstance(body["workspace_count"], int)
-    assert body["workspace_count"] >= 0
-
-
-def test_debug_state_reports_messaging_counts() -> None:
-    with TestClient(app) as client:
-        response = client.get("/debug/state")
-    assert response.status_code == 200
-    body = response.json()
-    assert isinstance(body["outbound_count"], int)
-    assert isinstance(body["inbound_count"], int)
-    assert isinstance(body["intents"], dict)
-    assert isinstance(body["recent_events"], list)
-    assert isinstance(body["leads"], dict)
-    assert isinstance(body["send_jobs"], dict)
-    assert "mailbox_last_sync_cursor" in body
+    assert body["workspace_id"] == WORKSPACE_ID
+    assert body["outbound_count"] == 0
+    assert body["inbound_count"] == 0
+    assert body["intents"] == {}
+    assert body["leads"] == {}
+    assert body["send_jobs"] == {}
+    assert body["recent_events"] == []
+    assert body["mailbox_last_sync_cursor"] is None

@@ -110,11 +110,11 @@ FOR UPDATE OF e SKIP LOCKED;
 |---|---|---|
 | API (FastAPI) | `outboxlab-api` | deployed by CI on every push to `main` |
 | Worker (Gmail poller, reply consumer, send-job drain) | `outboxlab-worker` | same image, `python -m app.entrypoints.worker`; deployed by hand with `make deploy-worker`; needs its own secrets |
-| Web (state viewer) | `outboxlab-web` | static placeholder today |
 | Sender (Go) | later | Step 5 |
 
 - Region `iad`. `auto_stop_machines` with `min_machines_running = 0` outside demo weeks.
 - Secrets via `fly secrets set`: database URL, API domain, Google OAuth values, LLM key.
+- The deployed API accepts only workspace API keys. A key is issued once by `python -m app.entrypoints.issue_api_key`, run where `DATABASE_URL` and `MAILBOX_WORKSPACE_ID` are set.
 - The api `release_command` runs `alembic upgrade head` in a one-off VM before serving machines start, so a broken migration fails the deploy instead of reaching traffic ([ADR 0010](../adr/0010-fly-deploy-with-release-migrations.md)).
 - `Settings` has required fields (`DATABASE_URL`, `API_DOMAIN`, `APP_ENV`) that are read at import time by both the app and Alembic. Every environment — local, CI, the fly release command — must set them.
 
@@ -122,7 +122,7 @@ FOR UPDATE OF e SKIP LOCKED;
 
 Compose is the daily runtime. The host keeps only account-bound tools (Docker, `fly`, optionally `gh` / `gcloud`); `uv`, `psql` and friends live inside the containers.
 
-Services: `proxy` (Caddy with local HTTPS), `api`, `worker`, `web`, `postgres`.
+Services: `proxy` (Caddy with local HTTPS), `api` (also serves the viewer at `/viewer/`), `worker`, `postgres`.
 
 **Env strategy**
 

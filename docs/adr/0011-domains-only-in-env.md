@@ -1,6 +1,6 @@
 # ADR 0011 — Hostnames live only in `.env`
 
-**Status:** accepted (Step 0)
+**Status:** accepted (Step 0); since Step 4 `API_DOMAIN` is the only domain, `WEB_DOMAIN` was removed with the web placeholder ([ADR 0016](0016-viewer-served-by-the-api.md))
 
 ## Context
 

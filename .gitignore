@@ -19,10 +19,7 @@ venv/
 .ruff_cache/
 .mypy_cache/
 
-# Node
-node_modules/
-.next/
-.turbo/
+# Build output
 dist/
 build/
 *.log

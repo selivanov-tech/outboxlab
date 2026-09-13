@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 _EXPECTED_TABLES = {
     "identity__workspaces",
+    "identity__api_keys",
     "campaign__campaigns",
     "campaign__steps",
     "campaign__leads",
@@ -56,3 +57,4 @@ async def test_rls_forced_on_tenant_tables(session: AsyncSession) -> None:
             f"{table} expected RLS=True FORCE=True, got {flags[table]}"
         )
     assert flags["identity__workspaces"] == (False, False)
+    assert flags["identity__api_keys"] == (False, False)

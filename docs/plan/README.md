@@ -19,7 +19,7 @@ Anything that does not strengthen that path goes to the [parking lot](#parking-l
 | 1 | [Walking skeleton deployed](step-1-walking-skeleton.md) | public fly URL answers `200`, Neon migrations green, seed workspace visible via API | done — [PR #1](https://github.com/selivanov-tech/outboxlab/pull/1) |
 | 2 | [Real email loop](step-2-real-email-loop.md) | send an email → reply → poller catches it → intent in DB / API | code merged — [PR #2](https://github.com/selivanov-tech/outboxlab/pull/2); live Gmail end-to-end run still pending |
 | 3 | [Campaign state machine](step-3-campaign-state-machine.md) | a classified reply puts the lead in `PAUSED`, future sends are cancelled | code merged — [PR #4](https://github.com/selivanov-tech/outboxlab/pull/4), [PR #5](https://github.com/selivanov-tech/outboxlab/pull/5); live Gmail run pending |
-| 4 | [Hardening and demo](step-4-hardening-and-demo.md) | live demo works, README v1 ready | planned |
+| 4 | [Hardening and demo](step-4-hardening-and-demo.md) | live demo works, README v1 ready | code merged — [PR #6](https://github.com/selivanov-tech/outboxlab/pull/6); demo video and live run pending |
 | 5 | [Go sender extraction](step-5-go-sender-extraction.md) | sender implementation can be switched without touching campaign / reply domain logic | planned |
 | 6 | [MCP server](step-6-mcp-server.md) | the API is usable from Claude Desktop / Claude Code through MCP | planned |
 | 7 | [Observability and README v2](step-7-observability.md) | metrics endpoint, README v2, architecture write-up | planned |
@@ -46,7 +46,7 @@ Known and useful, but not on the critical path:
 - Billing (Stripe subscriptions, mailbox quotas).
 - Kind + Helm local Kubernetes.
 - Custom domain for the deployed app.
-- Full auth: users, sessions, workspace API keys. Today the workspace comes from the `X-Workspace-Id` header.
+- Full auth: users, memberships, sessions, API key management and rotation. Step 4 added only a minimal workspace API key ([ADR 0017](../adr/0017-workspace-api-keys.md)).
 - Removing the single-tenant `MAILBOX_WORKSPACE_ID`. It needs two things together: an OAuth web flow with per-mailbox refresh tokens stored encrypted in the database, and a worker that lists mailboxes from the database and polls each one in its own workspace session. The foundation (RLS per workspace, a tenant registry outside RLS, per-mailbox poll handler, provider-neutral ports) is already in place.
 - Encrypted-at-rest mailbox credentials.
 - CSV lead upload and a sequence builder UI.

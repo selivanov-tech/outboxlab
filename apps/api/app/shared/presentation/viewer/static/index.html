@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OutboxLab state viewer</title>
+    <style>
+      :root { color-scheme: light; --ink: #1d2330; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: #f8fafc; }
+      header { display: flex; align-items: baseline; gap: 0.75rem; padding: 1rem 1.5rem; background: #fff; border-bottom: 1px solid var(--line); }
+      h1 { margin: 0; font-size: 1.15rem; }
+      h2 { margin: 0 0 0.5rem; font-size: 1rem; }
+      h3 { margin: 1rem 0 0.4rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
+      .muted { color: var(--muted); }
+      form { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; padding: 1rem 1.5rem; }
+      label { display: grid; gap: 0.2rem; font-size: 0.8rem; color: var(--muted); }
+      input { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; min-width: 18rem; }
+      button { font: inherit; padding: 0.4rem 0.9rem; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+      main { display: grid; gap: 1rem; padding: 0 1.5rem 2rem; grid-template-columns: minmax(0, 1fr); }
+      @media (min-width: 1100px) { main { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } #detail { grid-column: 1 / -1; } }
+      section { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 1rem; overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+      tbody tr.clickable { cursor: pointer; }
+      tbody tr.selected { background: #eff6ff; }
+      .badge { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; background: #f1f5f9; }
+      .state-scheduled, .state-pending { background: #f1f5f9; }
+      .state-sent, .state-running, .state-active { background: #dbeafe; color: #1e40af; }
+      .state-done { background: #dcfce7; color: #166534; }
+      .state-paused, .state-cancelled { background: #fef3c7; color: #92400e; }
+      .state-failed { background: #fee2e2; color: #991b1b; }
+      dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0; }
+      dt { color: var(--muted); }
+      dd { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>OutboxLab</h1>
+      <span class="muted">read-only state viewer</span>
+    </header>
+
+    <form id="credentials">
+      <label>API key
+        <input id="api-key" type="password" autocomplete="off" placeholder="olab_…" />
+      </label>
+      <label>or workspace id (non-production only)
+        <input id="workspace-id" autocomplete="off" placeholder="00000000-0000-0000-0000-000000000000" />
+      </label>
+      <button type="submit">Connect</button>
+      <span id="status" class="muted" role="status"></span>
+    </form>
+
+    <main id="main" hidden>
+      <section>
+        <h2>Campaigns</h2>
+        <table id="campaigns">
+          <thead><tr><th>Name</th><th>Status</th><th>Leads</th><th>Created</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Workspace</h2>
+        <dl id="counts"></dl>
+        <h3>Recent events</h3>
+        <table id="events">
+          <thead><tr><th>Event</th><th>Aggregate</th><th>At</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section id="detail" hidden>
+        <h2 id="detail-title"></h2>
+        <h3>Steps</h3>
+        <table id="steps">
+          <thead><tr><th>#</th><th>Subject</th><th>Delay</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h3>Leads</h3>
+        <table id="leads">
+          <thead><tr><th>Email</th><th>State</th><th>Steps sent</th><th>Stop reason</th><th>Reply intent</th><th>Next send</th><th>Updated</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="viewer.js"></script>
+  </body>
+</html>
