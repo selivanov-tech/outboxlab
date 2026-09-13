@@ -147,6 +147,26 @@ class SendJobRepository:
     async def cancel(self, job_id: UUID, moment: datetime) -> None:
         await self._set(job_id, moment, status=SendJobStatus.CANCELLED.value)
 
+    async def cancel_pending_for_lead(self, lead_id: UUID, moment: datetime) -> None:
+        await self._session.execute(
+            update(SendJobRow)
+            .where(
+                SendJobRow.lead_id == lead_id,
+                SendJobRow.status == SendJobStatus.PENDING.value,
+            )
+            .values(status=SendJobStatus.CANCELLED.value, updated_at=moment)
+        )
+
+    async def find_lead_id_by_outbound_message(
+        self, outbound_message_id: UUID
+    ) -> UUID | None:
+        stmt = (
+            select(SendJobRow.lead_id)
+            .where(SendJobRow.outbound_message_id == outbound_message_id)
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
     async def next_send_at_by_lead(self, campaign_id: UUID) -> dict[UUID, datetime]:
         stmt = (
             select(SendJobRow.lead_id, func.min(SendJobRow.scheduled_at))

@@ -84,6 +84,9 @@ class InboundMessage(Base):
 
 class OutboxEvent(Base):
     __tablename__ = "messaging__outbox_events"
+    __table_args__ = (
+        Index("ix_outbox_events_event_type_created_at", "event_type", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
