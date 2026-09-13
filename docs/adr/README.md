@@ -21,3 +21,4 @@ Short records of the decisions that shape this codebase. Format: context → dec
 | [0015](0015-sending-guards-in-messaging.md) | Sending guards in the messaging send path: suppression, advisory lock per mailbox, daily cap per UTC day |
 | [0016](0016-viewer-served-by-the-api.md) | The read-only state viewer is a static page served by the API; the web placeholder and `WEB_DOMAIN` are removed |
 | [0017](0017-workspace-api-keys.md) | Minimal workspace API keys: Bearer key resolves the workspace; the workspace header is rejected in production |
+| [0018](0018-go-sender-claims-and-hands-off.md) | Go sender claims send jobs with the shared statement and hands each job to an internal API route |

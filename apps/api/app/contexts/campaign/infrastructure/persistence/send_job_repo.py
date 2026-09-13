@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import DateTime, Integer, func, select, text, update
@@ -18,28 +19,28 @@ from app.contexts.campaign.domain.send_job import (
 from app.contexts.campaign.infrastructure.db.models import Lead as LeadRow
 from app.contexts.campaign.infrastructure.db.models import SendJob as SendJobRow
 
-CLAIM_SQL = text(
-    """
-    UPDATE campaign__send_jobs
-    SET status = 'running',
-        locked_at = :moment,
-        locked_by = :worker_id,
-        attempts = attempts + 1,
-        updated_at = :moment
-    WHERE id IN (
-        SELECT id FROM campaign__send_jobs
-        WHERE workspace_id = :workspace_id
-          AND (
-            (status = 'pending' AND scheduled_at <= :moment)
-            OR (status = 'running' AND locked_at < :lease_expired_before)
-          )
-        ORDER BY scheduled_at
-        LIMIT :limit
-        FOR UPDATE SKIP LOCKED
-    )
-    RETURNING id, workspace_id, mailbox_id, lead_id, payload, attempts, scheduled_at
-    """
-).columns(
+CLAIM_STATEMENT = """\
+UPDATE campaign__send_jobs
+SET status = 'running',
+    locked_at = :moment,
+    locked_by = :worker_id,
+    attempts = attempts + 1,
+    updated_at = :moment
+WHERE id IN (
+    SELECT id FROM campaign__send_jobs
+    WHERE workspace_id = :workspace_id
+      AND (
+        (status = 'pending' AND scheduled_at <= :moment)
+        OR (status = 'running' AND locked_at < :lease_expired_before)
+      )
+    ORDER BY scheduled_at
+    LIMIT :limit
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, workspace_id, mailbox_id, lead_id, payload, attempts, scheduled_at
+"""
+
+CLAIM_SQL = text(CLAIM_STATEMENT).columns(
     id=PgUUID(as_uuid=True),
     workspace_id=PgUUID(as_uuid=True),
     mailbox_id=PgUUID(as_uuid=True),
@@ -98,19 +99,23 @@ class SendJobRepository:
                 },
             )
         ).all()
-        claimed = [
-            ClaimedSendJob(
-                id=row.id,
-                workspace_id=row.workspace_id,
-                mailbox_id=row.mailbox_id,
-                lead_id=row.lead_id,
-                payload=SendJobPayload.model_validate(row.payload),
-                attempts=row.attempts,
-                scheduled_at=row.scheduled_at,
-            )
-            for row in rows
-        ]
+        claimed = [_claimed(row) for row in rows]
         return sorted(claimed, key=lambda job: job.scheduled_at)
+
+    async def get_claimed(
+        self, job_id: UUID, workspace_id: UUID
+    ) -> ClaimedSendJob | None:
+        stmt = (
+            select(SendJobRow)
+            .where(
+                SendJobRow.id == job_id,
+                SendJobRow.workspace_id == workspace_id,
+                SendJobRow.status == SendJobStatus.RUNNING.value,
+            )
+            .with_for_update()
+        )
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _claimed(row) if row is not None else None
 
     async def complete(
         self, job_id: UUID, outbound_message_id: UUID, moment: datetime
@@ -207,3 +212,15 @@ class SendJobRepository:
             .where(SendJobRow.id == job_id)
             .values(updated_at=moment, **values)
         )
+
+
+def _claimed(row: Any) -> ClaimedSendJob:
+    return ClaimedSendJob(
+        id=row.id,
+        workspace_id=row.workspace_id,
+        mailbox_id=row.mailbox_id,
+        lead_id=row.lead_id,
+        payload=SendJobPayload.model_validate(row.payload),
+        attempts=row.attempts,
+        scheduled_at=row.scheduled_at,
+    )

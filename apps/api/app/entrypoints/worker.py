@@ -73,6 +73,19 @@ def _worker_id() -> str:
     return f"python-{socket.gethostname()}-{os.getpid()}"
 
 
+def drains_send_jobs(settings: Settings) -> bool:
+    return settings.sender_impl == "python"
+
+
+def _loops(settings: Settings) -> str:
+    loops = ["poll inbox", "dispatch classified replies"]
+    if drains_send_jobs(settings):
+        loops.append("drain send jobs")
+    else:
+        loops.append(f"send jobs left to the {settings.sender_impl} sender")
+    return " -> ".join(loops)
+
+
 def _missing_runtime_config(settings: Settings) -> list[str]:
     required = {
         "GOOGLE_REFRESH_TOKEN": settings.google_refresh_token,
@@ -168,10 +181,11 @@ async def _tick(
         await _dispatch_classified_replies(workspace_id)
     except Exception as exc:
         _log(f"reply dispatch error ({exc.__class__.__name__}): {exc}")
-    try:
-        await _drain_send_jobs(workspace_id, sender, worker_id)
-    except Exception as exc:
-        _log(f"send error ({exc.__class__.__name__}): {exc}")
+    if drains_send_jobs(settings):
+        try:
+            await _drain_send_jobs(workspace_id, sender, worker_id)
+        except Exception as exc:
+            _log(f"send error ({exc.__class__.__name__}): {exc}")
     return idle_reason
 
 
@@ -191,7 +205,7 @@ async def _run() -> None:
             sender = GmailApiSender(client, token_provider)
             classifier = build_intent_classifier(settings, client)
             _log(
-                "loops: poll inbox -> dispatch classified replies -> drain send jobs; "
+                f"loops: {_loops(settings)}; "
                 f"workspace {settings.mailbox_workspace_id or 'not set'}; "
                 f"classifier {classifier.__class__.__name__}"
             )

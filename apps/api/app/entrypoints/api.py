@@ -4,7 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import Settings, get_settings
-from app.contexts.campaign.presentation.routes import campaigns_router
+from app.contexts.campaign.presentation.routes import (
+    campaigns_router,
+    internal_send_jobs_router,
+)
 from app.contexts.identity.infrastructure.api_key_resolver import (
     resolve_workspace_by_api_key,
 )
@@ -42,6 +45,8 @@ def create_app(settings: Settings) -> FastAPI:
     # production even behind an API key.
     if not production:
         app.include_router(messaging_router)
+    if not production and settings.internal_api_token:
+        app.include_router(internal_send_jobs_router)
     return app
 
 

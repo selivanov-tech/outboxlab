@@ -132,6 +132,20 @@ seed:  ## Seed default workspace + mailbox into local DB
 api-key:  ## Print a new API key for MAILBOX_WORKSPACE_ID (shown once)
 	$(COMPOSE) exec api uv run python -m app.entrypoints.issue_api_key
 
+# ---- Go sender ----
+
+.PHONY: sender-go-up
+sender-go-up:  ## Start the Go sender (set SENDER_IMPL=go and INTERNAL_API_TOKEN in .env, then make restart)
+	$(COMPOSE) --profile go-sender up -d sender-go
+
+.PHONY: sender-go-logs
+sender-go-logs:  ## Tail Go sender logs
+	$(COMPOSE) --profile go-sender logs -f --tail=100 sender-go
+
+.PHONY: sender-go-test
+sender-go-test:  ## go vet + go test for the Go sender, in a container
+	$(COMPOSE) --profile go-sender run --rm --no-deps sender-go sh -c "go vet ./... && go test ./..."
+
 # ---- Demo ----
 
 .PHONY: smoke-readonly

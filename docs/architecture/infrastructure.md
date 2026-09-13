@@ -47,7 +47,7 @@ CREATE INDEX ix_send_jobs_running ON campaign__send_jobs (locked_at) WHERE statu
 ```
 
 ```sql
--- The Python worker (Step 3) and the Go sender (Step 5) share this contract.
+-- contracts/jobs/send_job/claim.sql — the Python worker and the Go sender run it byte for byte.
 -- :moment is the caller's clock; :lease_expired_before = :moment - 5 minutes.
 UPDATE campaign__send_jobs
 SET status = 'running', locked_at = :moment, locked_by = :worker_id,
@@ -110,7 +110,7 @@ FOR UPDATE OF e SKIP LOCKED;
 |---|---|---|
 | API (FastAPI) | `outboxlab-api` | deployed by CI on every push to `main` |
 | Worker (Gmail poller, reply consumer, send-job drain) | `outboxlab-worker` | same image, `python -m app.entrypoints.worker`; deployed by hand with `make deploy-worker`; needs its own secrets |
-| Sender (Go) | later | Step 5 |
+| Sender (Go) | not deployed | local compose profile `go-sender`; the production path is a later decision ([ADR 0018](../adr/0018-go-sender-claims-and-hands-off.md)) |
 
 - Region `iad`. `auto_stop_machines` with `min_machines_running = 0` outside demo weeks.
 - Secrets via `fly secrets set`: database URL, API domain, Google OAuth values, LLM key.

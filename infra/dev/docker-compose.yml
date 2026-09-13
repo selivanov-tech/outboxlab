@@ -72,6 +72,29 @@ services:
       postgres:
         condition: service_healthy
 
+  sender-go:
+    image: golang:1.26.2-alpine
+    profiles: ["go-sender"]
+    restart: unless-stopped
+    working_dir: /src/apps/sender-go
+    command: ["go", "run", "./cmd/sender"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-outboxlab}:${POSTGRES_PASSWORD:-outboxlab}@postgres:5432/${POSTGRES_DB:-outboxlab}
+      MAILBOX_WORKSPACE_ID: ${MAILBOX_WORKSPACE_ID:-}
+      API_INTERNAL_URL: http://api:8000
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
+      GOFLAGS: -buildvcs=false
+    volumes:
+      - ../../apps/sender-go:/src/apps/sender-go
+      # The claim contract test reads contracts/ next to apps/, as in the repository.
+      - ../../contracts:/src/contracts:ro
+      - go-mod-cache:/go/pkg/mod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
   proxy:
     image: caddy:2.9-alpine
     restart: unless-stopped
@@ -89,3 +112,4 @@ services:
 
 volumes:
   pgdata:
+  go-mod-cache:

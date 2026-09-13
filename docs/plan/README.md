@@ -20,7 +20,7 @@ Anything that does not strengthen that path goes to the [parking lot](#parking-l
 | 2 | [Real email loop](step-2-real-email-loop.md) | send an email → reply → poller catches it → intent in DB / API | code merged — [PR #2](https://github.com/selivanov-tech/outboxlab/pull/2); live Gmail end-to-end run still pending |
 | 3 | [Campaign state machine](step-3-campaign-state-machine.md) | a classified reply puts the lead in `PAUSED`, future sends are cancelled | code merged — [PR #4](https://github.com/selivanov-tech/outboxlab/pull/4), [PR #5](https://github.com/selivanov-tech/outboxlab/pull/5); live Gmail run pending |
 | 4 | [Hardening and demo](step-4-hardening-and-demo.md) | live demo works, README v1 ready | code merged — [PR #6](https://github.com/selivanov-tech/outboxlab/pull/6); demo video and live run pending |
-| 5 | [Go sender extraction](step-5-go-sender-extraction.md) | sender implementation can be switched without touching campaign / reply domain logic | planned |
+| 5 | [Go sender extraction](step-5-go-sender-extraction.md) | sender implementation can be switched without touching campaign / reply domain logic | code merged — [PR #7](https://github.com/selivanov-tech/outboxlab/pull/7); live switch with real email pending |
 | 6 | [MCP server](step-6-mcp-server.md) | the API is usable from Claude Desktop / Claude Code through MCP | planned |
 | 7 | [Observability and README v2](step-7-observability.md) | metrics endpoint, README v2, architecture write-up | planned |
 

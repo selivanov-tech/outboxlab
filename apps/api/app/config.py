@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 AppEnv = Literal["local", "ci", "production"]
 LlmProvider = Literal["anthropic", "openai"]
+SenderImpl = Literal["python", "go"]
 
 
 class Settings(BaseSettings):
@@ -28,6 +29,8 @@ class Settings(BaseSettings):
     llm_provider: LlmProvider = "anthropic"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    sender_impl: SenderImpl = "python"
+    internal_api_token: str = ""
 
     @field_validator("database_url", mode="before")
     @classmethod

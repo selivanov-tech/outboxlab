@@ -30,6 +30,10 @@ class SendJobOutcome(StrEnum):
     CANCELLED = "cancelled"
 
 
+class SendJobNotClaimedError(Exception):
+    pass
+
+
 class ClaimDueSendJobsHandler:
     def __init__(self, jobs: SendJobRepositoryPort) -> None:
         self._jobs = jobs
@@ -104,3 +108,19 @@ class ProcessClaimedSendJobHandler:
                 )
                 await self._jobs.fail(job.id, error, moment)
                 return SendJobOutcome.FAILED
+
+
+class ProcessSendJobByIdHandler:
+    def __init__(
+        self, jobs: SendJobRepositoryPort, process: ProcessClaimedSendJobHandler
+    ) -> None:
+        self._jobs = jobs
+        self._process = process
+
+    async def execute(
+        self, *, job_id: UUID, workspace_id: UUID, moment: datetime
+    ) -> SendJobOutcome:
+        job = await self._jobs.get_claimed(job_id, workspace_id)
+        if job is None:
+            raise SendJobNotClaimedError
+        return await self._process.execute(job, moment)

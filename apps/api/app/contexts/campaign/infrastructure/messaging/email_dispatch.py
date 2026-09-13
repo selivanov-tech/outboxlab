@@ -1,6 +1,7 @@
 from datetime import timedelta
 from uuid import UUID
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contexts.campaign.application.ports.email_dispatch import (
@@ -22,6 +23,11 @@ from app.contexts.messaging.application.commands.send_email import (
     SendEmailHandler,
 )
 from app.contexts.messaging.application.ports.email_sender import EmailSenderPort
+from app.config import Settings
+from app.contexts.messaging.infrastructure.gmail.access_token import (
+    GoogleAccessTokenProvider,
+)
+from app.contexts.messaging.infrastructure.gmail.sender import GmailApiSender
 from app.contexts.messaging.infrastructure.mailbox.gateway import MailboxGateway
 from app.contexts.messaging.infrastructure.persistence.mailbox_send_lock import (
     PostgresMailboxSendLock,
@@ -73,3 +79,15 @@ class MessagingEmailDispatch:
         return DispatchSent(
             outbound_message_id=outbound.id, sent_at=outbound.created_at
         )
+
+
+def gmail_email_dispatch(
+    session: AsyncSession, client: httpx.AsyncClient, settings: Settings
+) -> MessagingEmailDispatch:
+    token_provider = GoogleAccessTokenProvider(
+        client,
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        refresh_token=settings.google_refresh_token,
+    )
+    return MessagingEmailDispatch(session, GmailApiSender(client, token_provider))

@@ -45,7 +45,7 @@ The full model the sprint is walking toward. Names are the domain language; the 
 
 **Campaign** — `Campaign` (root) with `Step` and `Lead`; lead states `PENDING` / `SCHEDULED` / `SENT` / `PAUSED` / `DONE` / `FAILED`. Events: `CampaignCreated`, `LeadAdded`, `StepScheduled`, `LeadPaused`, `LeadCompleted`, `LeadInvalidated`. Invariant: `Lead.state` changes only through the aggregate.
 
-**Sending** — `SendTask` (root: mailbox, lead, step, schedule, attempts). Events: `MessageSent` (with the RFC 822 `Message-ID` for later matching), `MessageBounced`, `MessageDeferred`, `SendTaskFailed`. Invariant: no `MessageSent` without a valid rate-limit window. Today the guards live inside `messaging` and the job queue inside `campaign`; Sending is the first extraction candidate (Step 5).
+**Sending** — `SendTask` (root: mailbox, lead, step, schedule, attempts). Events: `MessageSent` (with the RFC 822 `Message-ID` for later matching), `MessageBounced`, `MessageDeferred`, `SendTaskFailed`. Invariant: no `MessageSent` without a valid rate-limit window. Today the guards live inside `messaging` and the job queue inside `campaign`. Step 5 moved the claim loop into a Go service that hands each job to an internal API route, so the send path itself is still Python ([ADR 0018](../adr/0018-go-sender-claims-and-hands-off.md)).
 
 **Reply Handling** — `InboundMessage` (root), `Reply` linked to a lead. Value object `ReplyIntent`: `POSITIVE` / `NEGATIVE` / `OOO` / `UNSUBSCRIBE` / `UNCLEAR`, plus `BOUNCE` set by the adapter for delivery-status notifications (Step 3). Events: `InboundReceived`, `ReplyMatched`, `ReplyClassified`. Invariant: a `Reply` exists only when the inbound message matched an outbound one. Today this also lives inside `messaging`.
 
@@ -84,6 +84,9 @@ POST /campaigns/{id}/start → leads scheduled, step-1 jobs in campaign__send_jo
 worker: drain → claim (SKIP LOCKED, lease) → per job, one transaction:
   suppression check → advisory lock per mailbox → daily cap (UTC day) → Gmail send
   → lead sent / done, next step job at sent_at + delay
+
+with SENDER_IMPL=go (Step 5): the Go sender claims with the same statement,
+  then POST /internal/send-jobs/{id}/process → the same per-job transaction in the API
 ```
 
 ## Key patterns

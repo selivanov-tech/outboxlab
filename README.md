@@ -2,7 +2,7 @@
 
 A small cold-email outreach engine built as a proof of work: a campaign sends a short sequence from a Gmail mailbox, a reply is matched and classified, and the lead is paused before the follow-up goes out. The code is a modular monolith with DDD bounded contexts and ports, on a **Postgres-only operational stack** — the job queue, locks, send caps, suppression list and outbox are tables and SQL, with no Redis and no broker. An LLM classifier sits behind a port with a deterministic fallback, so the demo never depends on a vendor.
 
-**Status: Step 4 of 7 — hardened demo, README v1.** Next: a Go sender on the same job contract, MCP access, metrics. See [Roadmap](#roadmap).
+**Status: Step 5 of 7 — Go sender extraction.** Next: MCP access, metrics. See [Roadmap](#roadmap).
 
 ## Demo path
 
@@ -40,6 +40,7 @@ Commands for a live run are in [Run the demo](#run-the-demo).
 - **Campaigns** — ordered steps (`subject`, `body`, `delay_seconds`) and leads. Lead state (`pending → scheduled → sent → done`, or `paused` / `failed`) changes only through the `Campaign` aggregate. Starting a campaign is idempotent.
 - **Send queue** — `campaign__send_jobs`, claimed with `SELECT … FOR UPDATE SKIP LOCKED` and a 5-minute lease. Each job runs in its own transaction; errors retry with backoff and fail the lead after three attempts. The payload is frozen in [`contracts/jobs/send_job/v1.json`](contracts/jobs/send_job/v1.json).
 - **Sending guards** — before every send: the recipient is not suppressed, the mailbox takes a Postgres advisory lock, and today's sent count (UTC day) is under the mailbox's `daily_send_cap` (default 20).
+- **Two senders, one contract** — a Go service (`apps/sender-go`) can drain the queue instead of the Python worker, switched with `SENDER_IMPL`. See [Sender extraction](#sender-extraction).
 - **Replies** — the worker polls Gmail with a sync cursor and matches a reply by `In-Reply-To` / `References`, then thread, then a normalised subject from the same address. The classifier reads the de-quoted body and returns `positive · negative · ooo · unsubscribe · unclear`.
 - **Bounces and unsubscribes** — delivery-status notifications are flagged in the Gmail adapter, skip the classifier, suppress the address and fail the lead. An unsubscribe reply also suppresses the address.
 - **Outbox and consumer** — `InboundReceived`, `ReplyMatched` and `ReplyClassified` are written in the same transaction as the state change ([schemas](contracts/events/)). The campaign context consumes `ReplyClassified` with a processed-events set: at-least-once delivery, one effect per event.
@@ -78,10 +79,29 @@ More: [architecture overview](docs/architecture/overview.md), [infrastructure](d
 - `POST /send-test-email` is not idempotent.
 - If Gmail's history window has expired, the receiver re-baselines and skips the gap (logged as a warning).
 
+## Sender extraction
+
+Sending is the first extraction candidate. Step 5 moved the claim loop into Go without touching the campaign or reply domain ([ADR 0018](docs/adr/0018-go-sender-claims-and-hands-off.md)).
+
+| | Python worker (`SENDER_IMPL=python`) | Go sender (`SENDER_IMPL=go`) |
+|---|---|---|
+| Claim | SQLAlchemy, in the worker process | pgx, in `apps/sender-go` |
+| Claim statement | [`contracts/jobs/send_job/claim.sql`](contracts/jobs/send_job/claim.sql) | the same file, byte for byte |
+| Payload | `send_job` v1 via Pydantic | `send_job` v1, strict JSON decoding |
+| Process one job | in-process handler | `POST /internal/send-jobs/{id}/process` runs the same handler in the API |
+| Guards, Gmail send, lead state, next step | Python | Python (unchanged) |
+| On failure | retry with backoff; the lease covers crashes | the job stays claimed until the lease expires |
+| Logs | worker lines | JSON: job, lead, step, attempt, outcome, queue latency |
+
+**What moved:** the claim loop, the process boundary, the runtime. **What stayed behind the contract:** the state machine, the guards, the Gmail adapter, reply handling and the schema.
+
+Switch locally: set `SENDER_IMPL=go` and `INTERNAL_API_TOKEN` in `.env`, run `make restart` and `make sender-go-up`, then run the demo. The internal route exists only outside production; the production path for the Go sender is a later decision.
+
 ## Stack
 
 - API: FastAPI, Pydantic v2, SQLAlchemy 2.0 async, Alembic (Python 3.14, uv). The API also serves the viewer.
 - Worker: a separate process from the same project (`python -m app.entrypoints.worker`) — polls Gmail, dispatches classified replies, drains send jobs.
+- Sender (optional): a Go 1.26 service (`apps/sender-go`, pgx) that claims send jobs and hands them to the API.
 - Database: Postgres 17 locally, Neon in production.
 - Deploy: fly.io; CI on GitHub Actions.
 
@@ -90,7 +110,8 @@ More: [architecture overview](docs/architecture/overview.md), [infrastructure](d
 ```
 apps/api/        FastAPI app, worker entrypoint, Alembic migrations, tests
                  app/contexts/<bc> · app/shared · app/entrypoints (api, worker, seed, issue_api_key)
-contracts/       versioned JSON Schemas: events/ and jobs/
+apps/sender-go/  Go sender: claims send jobs, hands each one to the API
+contracts/       versioned JSON Schemas (events/, jobs/) and the shared claim statement
 infra/
   dev/           docker-compose, dev Dockerfile, Caddy proxy, demo_reset.sql
   prod/          prod Dockerfile, fly.toml files
@@ -106,7 +127,7 @@ docs/            plan (one page per step), architecture notes, ADRs
 3. ~~[Step 2](docs/plan/step-2-real-email-loop.md) — real email loop: Gmail send, inbox polling, reply matching, intent classification, outbox~~
 4. ~~[Step 3](docs/plan/step-3-campaign-state-machine.md) — campaign state machine, send queue, bounce and unsubscribe suppression, daily caps~~
 5. ~~[Step 4](docs/plan/step-4-hardening-and-demo.md) — hardening and demo: API keys, viewer, smoke tests, README v1~~
-6. [Step 5](docs/plan/step-5-go-sender-extraction.md) — Go sender on the same job contract.
+6. ~~[Step 5](docs/plan/step-5-go-sender-extraction.md) — Go sender on the same job contract, switched by configuration~~
 7. [Step 6](docs/plan/step-6-mcp-server.md) — MCP server over the API (OpenAPI-as-MCP).
 8. [Step 7](docs/plan/step-7-observability.md) — observability, README v2.
 
@@ -180,6 +201,8 @@ make test               # pytest
 make typecheck          # pyright
 make lint / make format # ruff check / fix
 make smoke-readonly     # read-only smoke test, sends no email
+make sender-go-test     # go vet + go test for the Go sender
+make sender-go-up       # start the Go sender (SENDER_IMPL=go)
 make api-key            # print a new workspace API key once
 make ready              # leak check + ruff + pyright + tests
 make shell-api / shell-worker / shell-db
@@ -211,7 +234,7 @@ Tests `SET LOCAL ROLE outboxlab_app` so row-level security applies (it does not 
 
 ## CI
 
-Every pull request runs **api-tests** (Postgres 17 service, role bootstrap, migrations, seed, pytest), **typecheck** (pyright), **lint** (ruff format check + check) and **leak-check** (no hostnames in tracked files). On a push to `main`, **deploy-api** ships the API to fly.io after all four pass, inside the `production` environment; it needs a `FLY_API_TOKEN` secret (`fly tokens create deploy -a outboxlab-api`).
+Every pull request runs **api-tests** (Postgres 17 service, role bootstrap, migrations, seed, pytest, and the Go claim test against the migrated database), **typecheck** (pyright), **lint** (ruff format check + check), **sender-go** (gofmt, vet, test, build) and **leak-check** (no hostnames in tracked files). On a push to `main`, **deploy-api** ships the API to fly.io after all five pass, inside the `production` environment; it needs a `FLY_API_TOKEN` secret (`fly tokens create deploy -a outboxlab-api`).
 
 ## Deploy (fly.io)
 
@@ -231,4 +254,4 @@ The deployed API accepts only API keys. Issue one with `python -m app.entrypoint
 
 ## Package managers
 
-Python: `uv` only.
+Python: `uv` only. Go: modules (`go.mod`, `go.sum`).
