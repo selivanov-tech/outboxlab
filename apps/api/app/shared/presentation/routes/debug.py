@@ -7,6 +7,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.contexts.campaign.infrastructure.db.models import Lead as LeadRow
+from app.contexts.campaign.infrastructure.db.models import SendJob as SendJobRow
 from app.contexts.identity.infrastructure.db.models import Workspace as WorkspaceRow
 from app.contexts.mailbox.infrastructure.db.models import Mailbox as MailboxRow
 from app.contexts.messaging.infrastructure.db.models import (
@@ -63,6 +65,16 @@ async def state(
                 .group_by(InboundMessageRow.intent)
             )
         ).all()
+        lead_state_rows = (
+            await session.execute(
+                select(LeadRow.state, func.count()).group_by(LeadRow.state)
+            )
+        ).all()
+        send_job_rows = (
+            await session.execute(
+                select(SendJobRow.status, func.count()).group_by(SendJobRow.status)
+            )
+        ).all()
         event_rows = (
             await session.execute(
                 select(
@@ -84,6 +96,8 @@ async def state(
         "outbound_count": int(outbound_count),
         "inbound_count": int(inbound_count),
         "intents": {intent: int(count) for intent, count in intent_rows},
+        "leads": {state: int(count) for state, count in lead_state_rows},
+        "send_jobs": {status: int(count) for status, count in send_job_rows},
         "recent_events": [
             {
                 "event_type": event_type,

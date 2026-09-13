@@ -1,31 +1,35 @@
 import uuid
 from collections.abc import Iterator
+from datetime import timedelta
 from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.entrypoints.api import app
-from app.contexts.messaging.application.commands.send_test_email import (
+from app.contexts.messaging.application.commands.send_email import (
+    DailySendCapReachedError,
     MailboxNotConfiguredError,
-    SendTestEmailCommand,
+    RecipientSuppressedError,
+    SendEmailCommand,
 )
 from app.contexts.messaging.domain.outbound_message import OutboundMessage
-from app.contexts.messaging.presentation.routes.messaging import send_test_email_handler
+from app.contexts.messaging.presentation.routes.messaging import send_email_handler
+from app.shared.util.clock import now
 
 
 class _StubHandler:
     def __init__(self) -> None:
         self.returns: OutboundMessage | None = None
-        self.raises: type[Exception] | None = None
-        self.called_with: tuple[SendTestEmailCommand, UUID] | None = None
+        self.raises: Exception | None = None
+        self.called_with: tuple[SendEmailCommand, UUID] | None = None
 
     async def execute(
-        self, command: SendTestEmailCommand, workspace_id: UUID
+        self, command: SendEmailCommand, workspace_id: UUID
     ) -> OutboundMessage:
         self.called_with = (command, workspace_id)
         if self.raises is not None:
-            raise self.raises()
+            raise self.raises
         assert self.returns is not None
         return self.returns
 
@@ -33,11 +37,11 @@ class _StubHandler:
 @pytest.fixture
 def stub_handler() -> Iterator[_StubHandler]:
     stub = _StubHandler()
-    app.dependency_overrides[send_test_email_handler] = lambda: stub
+    app.dependency_overrides[send_email_handler] = lambda: stub
     try:
         yield stub
     finally:
-        app.dependency_overrides.pop(send_test_email_handler, None)
+        app.dependency_overrides.pop(send_email_handler, None)
 
 
 def _body() -> dict[str, str]:
@@ -76,7 +80,7 @@ def test_returns_401_without_header(stub_handler: _StubHandler) -> None:
 
 
 def test_returns_409_when_mailbox_not_configured(stub_handler: _StubHandler) -> None:
-    stub_handler.raises = MailboxNotConfiguredError
+    stub_handler.raises = MailboxNotConfiguredError()
 
     with TestClient(app) as client:
         response = client.post(
@@ -86,3 +90,31 @@ def test_returns_409_when_mailbox_not_configured(stub_handler: _StubHandler) -> 
         )
 
     assert response.status_code == 409
+
+
+def test_returns_409_when_recipient_is_suppressed(stub_handler: _StubHandler) -> None:
+    stub_handler.raises = RecipientSuppressedError()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/send-test-email",
+            json=_body(),
+            headers={"X-Workspace-Id": str(uuid.uuid7())},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Recipient is suppressed"
+
+
+def test_returns_429_when_daily_cap_is_reached(stub_handler: _StubHandler) -> None:
+    stub_handler.raises = DailySendCapReachedError(now() + timedelta(hours=1))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/send-test-email",
+            json=_body(),
+            headers={"X-Workspace-Id": str(uuid.uuid7())},
+        )
+
+    assert response.status_code == 429
+    assert response.json()["detail"].startswith("Daily send cap reached")

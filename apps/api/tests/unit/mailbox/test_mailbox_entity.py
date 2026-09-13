@@ -4,7 +4,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from app.contexts.mailbox.domain.mailbox import Mailbox
+from app.contexts.mailbox.domain.mailbox import DEFAULT_DAILY_SEND_CAP, Mailbox
 from app.shared.util.clock import now
 
 
@@ -14,6 +14,7 @@ def _make_mailbox(**overrides: object) -> Mailbox:
         "workspace_id": uuid.uuid7(),
         "email_address": "ops@example.com",
         "last_sync_cursor": None,
+        "daily_send_cap": DEFAULT_DAILY_SEND_CAP,
         "created_at": now(),
     }
     defaults.update(overrides)
@@ -33,6 +34,11 @@ def test_new_assigns_identity_and_lowercases_email() -> None:
     assert mb.workspace_id == ws_id
     assert mb.email_address == "ops@example.com"
     assert mb.last_sync_cursor is None
+    assert mb.daily_send_cap == DEFAULT_DAILY_SEND_CAP
+
+
+def test_new_accepts_an_explicit_daily_send_cap() -> None:
+    assert Mailbox.new(uuid.uuid7(), "ops@example.com", 5).daily_send_cap == 5
 
 
 def test_with_cursor_returns_updated_copy() -> None:

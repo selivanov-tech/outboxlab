@@ -10,18 +10,24 @@ from app.contexts.mailbox.domain.mailbox import Mailbox
 from app.contexts.mailbox.infrastructure.persistence.mailbox_repo import (
     MailboxRepository,
 )
-from app.contexts.messaging.application.commands.send_test_email import (
+from app.contexts.messaging.application.commands.send_email import (
     MailboxNotConfiguredError,
-    SendTestEmailCommand,
-    SendTestEmailHandler,
+    SendEmailCommand,
+    SendEmailHandler,
 )
 from app.contexts.messaging.application.ports.email_sender import SentEmail
 from app.contexts.messaging.infrastructure.db.models import (
     OutboundMessage as OutboundMessageRow,
 )
 from app.contexts.messaging.infrastructure.mailbox.gateway import MailboxGateway
+from app.contexts.messaging.infrastructure.persistence.mailbox_send_lock import (
+    PostgresMailboxSendLock,
+)
 from app.contexts.messaging.infrastructure.persistence.outbound_repo import (
     OutboundMessageRepository,
+)
+from app.contexts.messaging.infrastructure.persistence.suppression_repo import (
+    SuppressionRepository,
 )
 
 
@@ -52,14 +58,16 @@ async def test_persists_outbound_and_marks_sent(session: AsyncSession) -> None:
     ws = await _seed_workspace(session)
     await MailboxRepository(session).add(Mailbox.new(ws.id, "ops@example.com"))
     sender = _FakeSender()
-    handler = SendTestEmailHandler(
+    handler = SendEmailHandler(
         MailboxGateway(MailboxRepository(session)),
         OutboundMessageRepository(session),
+        SuppressionRepository(session),
+        PostgresMailboxSendLock(session),
         sender,
     )
 
     result = await handler.execute(
-        SendTestEmailCommand(to_email="lead@example.com", subject="Hi", body="Body"),
+        SendEmailCommand(to_email="lead@example.com", subject="Hi", body="Body"),
         ws.id,
     )
 
@@ -85,14 +93,16 @@ async def test_persists_outbound_and_marks_sent(session: AsyncSession) -> None:
 
 async def test_raises_when_mailbox_not_configured(session: AsyncSession) -> None:
     ws = await _seed_workspace(session)
-    handler = SendTestEmailHandler(
+    handler = SendEmailHandler(
         MailboxGateway(MailboxRepository(session)),
         OutboundMessageRepository(session),
+        SuppressionRepository(session),
+        PostgresMailboxSendLock(session),
         _FakeSender(),
     )
 
     with pytest.raises(MailboxNotConfiguredError):
         await handler.execute(
-            SendTestEmailCommand(to_email="lead@example.com", subject="s", body="b"),
+            SendEmailCommand(to_email="lead@example.com", subject="s", body="b"),
             ws.id,
         )

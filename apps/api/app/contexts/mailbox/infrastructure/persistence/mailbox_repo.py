@@ -39,6 +39,7 @@ def _to_domain(row: MailboxRow) -> Mailbox:
         workspace_id=row.workspace_id,
         email_address=row.email_address,
         last_sync_cursor=row.last_sync_cursor,
+        daily_send_cap=row.daily_send_cap,
         created_at=row.created_at,
     )
 
@@ -49,5 +50,6 @@ def _to_row(mailbox: Mailbox) -> MailboxRow:
         workspace_id=mailbox.workspace_id,
         email_address=mailbox.email_address,
         last_sync_cursor=mailbox.last_sync_cursor,
+        daily_send_cap=mailbox.daily_send_cap,
         created_at=mailbox.created_at,
     )

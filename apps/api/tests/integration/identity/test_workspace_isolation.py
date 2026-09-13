@@ -1,11 +1,15 @@
+import uuid
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.contexts.campaign.infrastructure.db.models import Campaign
+from app.contexts.campaign.infrastructure.db.models import Campaign as CampaignRow
 from app.contexts.identity.domain.workspace import Workspace
 from app.contexts.identity.infrastructure.persistence.workspace_repo import (
     WorkspaceRepository,
 )
+from app.contexts.mailbox.infrastructure.db.models import Mailbox as MailboxRow
+from app.shared.util.clock import now
 
 
 async def _set_workspace(session: AsyncSession, ws_id: str) -> None:
@@ -13,6 +17,33 @@ async def _set_workspace(session: AsyncSession, ws_id: str) -> None:
         text("SELECT set_config('app.workspace_id', :id, true)"),
         {"id": ws_id},
     )
+
+
+async def _add_campaign(
+    session: AsyncSession, workspace_id: uuid.UUID, name: str
+) -> None:
+    mailbox_id = uuid.uuid7()
+    session.add(
+        MailboxRow(
+            id=mailbox_id,
+            workspace_id=workspace_id,
+            email_address=f"{name}@example.com",
+            last_sync_cursor=None,
+            created_at=now(),
+        )
+    )
+    await session.flush()
+    session.add(
+        CampaignRow(
+            id=uuid.uuid7(),
+            workspace_id=workspace_id,
+            mailbox_id=mailbox_id,
+            name=name,
+            status="draft",
+            created_at=now(),
+        )
+    )
+    await session.flush()
 
 
 async def test_workspace_isolation_on_campaigns(session: AsyncSession) -> None:
@@ -27,12 +58,10 @@ async def test_workspace_isolation_on_campaigns(session: AsyncSession) -> None:
     await session.execute(text("SET LOCAL ROLE outboxlab_app"))
 
     await _set_workspace(session, str(ws_a.id))
-    session.add(Campaign(workspace_id=ws_a.id, name="a-campaign"))
-    await session.flush()
+    await _add_campaign(session, ws_a.id, "a-campaign")
 
     await _set_workspace(session, str(ws_b.id))
-    session.add(Campaign(workspace_id=ws_b.id, name="b-campaign"))
-    await session.flush()
+    await _add_campaign(session, ws_b.id, "b-campaign")
 
     await _set_workspace(session, str(ws_a.id))
     visible = (
