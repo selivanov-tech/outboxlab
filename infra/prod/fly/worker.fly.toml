@@ -13,6 +13,12 @@ primary_region = "iad"
 
 [env]
   APP_ENV = "production"
+  WORKER_METRICS_PORT = "9091"
+
+# fly's managed Prometheus scrapes this port.
+[metrics]
+  port = 9091
+  path = "/metrics"
 
 # No [http_service] — the worker has no public HTTP. Override the image CMD
 # (api's `fastapi run`) with the worker entrypoint via a process group.

@@ -63,6 +63,9 @@ services:
     env_file: ../../.env
     environment:
       APP_ENV: local
+      WORKER_METRICS_PORT: "9091"
+    expose:
+      - "9091"
     # Shares the api image + source; runs the worker entrypoint instead of the API.
     command:
       ["sh", "-c", "uv sync && exec uv run python -m app.entrypoints.worker"]

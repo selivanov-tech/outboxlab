@@ -5,6 +5,7 @@ import socket
 from uuid import UUID
 
 import httpx
+from prometheus_client import start_http_server
 
 from app.config import Settings, get_settings
 from app.contexts.campaign.application.handle_classified_replies import (
@@ -19,6 +20,10 @@ from app.contexts.campaign.infrastructure.messaging.email_dispatch import (
 )
 from app.contexts.campaign.infrastructure.messaging.reply_feed import (
     ClassifiedReplyFeed,
+)
+from app.contexts.campaign.infrastructure.metrics import (
+    record_send_job_outcome,
+    record_stopped_leads,
 )
 from app.contexts.campaign.infrastructure.persistence.campaign_repo import (
     CampaignRepository,
@@ -58,6 +63,7 @@ from app.contexts.messaging.infrastructure.persistence.suppression_repo import (
     SuppressionRepository,
 )
 from app.shared.infrastructure.db.engine import dispose_engine
+from app.shared.infrastructure.metrics import record_replies_classified
 from app.shared.infrastructure.db.session import session_for_workspace
 from app.shared.util.clock import now
 
@@ -114,9 +120,10 @@ async def _poll_inbox(
             receiver,
             classifier,
         )
-        processed = await handler.run_once(mailbox)
-    if processed:
-        _log(f"processed {processed} new reply(ies)")
+        result = await handler.run_once(mailbox)
+    record_replies_classified(intent.value for intent in result.classified)
+    if result.processed:
+        _log(f"processed {result.processed} new reply(ies)")
     return ""
 
 
@@ -128,6 +135,7 @@ async def _dispatch_classified_replies(workspace_id: UUID) -> None:
             LeadRepository(session),
             SendJobRepository(session),
         ).run_once(workspace_id=workspace_id, limit=REPLY_BATCH_SIZE, moment=now())
+    record_stopped_leads(stopped)
     for lead in stopped:
         _log(
             f"lead {lead.id} is {lead.state} ({lead.stop_reason}, "
@@ -154,6 +162,7 @@ async def _drain_send_jobs(
                 MessagingEmailDispatch(session, sender),
             )
             outcome = await handler.execute(job, now())
+        record_send_job_outcome(job, outcome, now())
         _log(
             f"send job {job.id} (lead {job.lead_id}, step "
             f"{job.payload.step_position}): {outcome}"
@@ -192,6 +201,9 @@ async def _tick(
 async def _run() -> None:
     settings = get_settings()
     worker_id = _worker_id()
+    if settings.worker_metrics_port:
+        start_http_server(settings.worker_metrics_port)
+        _log(f"metrics on :{settings.worker_metrics_port}/metrics")
     last_idle: str | None = None
     try:
         async with httpx.AsyncClient() as client:

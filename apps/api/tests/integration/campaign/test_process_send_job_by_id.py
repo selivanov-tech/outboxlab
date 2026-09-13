@@ -59,11 +59,12 @@ async def test_a_job_claimed_elsewhere_is_processed_once(
     sender = FakeGmailSender()
     handler = _handler(session, sender)
 
-    outcome = await handler.execute(
+    processed = await handler.execute(
         job_id=job.id, workspace_id=tenant.workspace_id, moment=now()
     )
 
-    assert outcome is SendJobOutcome.SENT
+    assert processed.outcome is SendJobOutcome.SENT
+    assert processed.job.id == job.id
     assert sender.sent == [("lead@example.com", "Hello")]
     with pytest.raises(SendJobNotClaimedError):
         await handler.execute(

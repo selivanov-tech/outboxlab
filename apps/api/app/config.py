@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     sender_impl: SenderImpl = "python"
     internal_api_token: str = ""
+    worker_metrics_port: int = 0
 
     @field_validator("database_url", mode="before")
     @classmethod

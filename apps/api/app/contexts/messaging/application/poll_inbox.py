@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from app.contexts.messaging.application.matching import match_reply
 from app.contexts.messaging.application.ports.email_receiver import EmailReceiverPort
 from app.contexts.messaging.application.ports.inbound_repository import (
@@ -32,6 +34,12 @@ _SUPPRESSION_REASONS = {
 }
 
 
+@dataclass(frozen=True)
+class PollResult:
+    processed: int
+    classified: tuple[Intent, ...]
+
+
 class PollInboxHandler:
     def __init__(
         self,
@@ -51,7 +59,7 @@ class PollInboxHandler:
         self._receiver = receiver
         self._classifier = classifier
 
-    async def run_once(self, mailbox: MailboxView) -> int:
+    async def run_once(self, mailbox: MailboxView) -> PollResult:
         result = await self._receiver.fetch_new(
             mailbox_email=mailbox.email_address,
             since_cursor=mailbox.last_sync_cursor,
@@ -59,6 +67,7 @@ class PollInboxHandler:
         candidates = await self._outbound_repo.list_unanswered(mailbox.id)
 
         processed = 0
+        classified: list[Intent] = []
         for fetched in result.messages:
             if await self._inbound_repo.exists(mailbox.id, fetched.provider_message_id):
                 continue
@@ -116,6 +125,7 @@ class PollInboxHandler:
                     )
                 )
                 inbound = inbound.classified_as(intent)
+                classified.append(intent)
                 await self._inbound_repo.update(inbound)
                 suppression_reason = _SUPPRESSION_REASONS.get(intent)
                 if suppression_reason is not None:
@@ -145,4 +155,4 @@ class PollInboxHandler:
         await self._mailbox_gateway.advance_cursor(
             mailbox.workspace_id, result.new_cursor
         )
-        return processed
+        return PollResult(processed=processed, classified=tuple(classified))

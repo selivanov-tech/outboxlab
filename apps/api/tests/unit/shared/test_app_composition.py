@@ -28,6 +28,7 @@ def test_production_serves_campaigns_and_viewer_but_not_test_email() -> None:
         "/debug/state",
         "/viewer",
         "/mcp",
+        "/metrics",
     } <= paths
     assert "/send-test-email" not in paths
 
