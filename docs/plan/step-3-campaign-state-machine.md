@@ -2,7 +2,7 @@
 
 [← Back to the plan](README.md)
 
-**Status: code merged** in two stacked pull requests — [PR #4](https://github.com/selivanov-tech/outboxlab/pull/4) (aggregate, send queue, sending guards, campaign API) and [PR #5](https://github.com/selivanov-tech/outboxlab/pull/5) (bounce and unsubscribe signals, reply consumer, docs). The live Gmail run of a campaign (runbook below) is done by hand with real credentials.
+**Status: code merged** in two stacked pull requests — [PR #4](https://github.com/selivanov-tech/outboxlab/pull/4) (aggregate, send queue, sending guards, campaign API) and [PR #10](https://github.com/selivanov-tech/outboxlab/pull/10) (bounce and unsubscribe signals, reply consumer, docs). The live Gmail run of a campaign (runbook below) is done by hand with real credentials.
 
 ## Goal
 
