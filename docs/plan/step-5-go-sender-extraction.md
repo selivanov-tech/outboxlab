@@ -2,7 +2,7 @@
 
 [← Back to the plan](README.md)
 
-**Status: code merged** — PR_STEP_5. A live switch with real email is done by hand.
+**Status: code merged** — [PR #7](https://github.com/selivanov-tech/outboxlab/pull/7). A live switch with real email is done by hand.
 
 ## Goal
 
