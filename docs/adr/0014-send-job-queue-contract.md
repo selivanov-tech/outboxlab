@@ -9,7 +9,7 @@ Campaign sends must be scheduled (a follow-up runs minutes to days after the fir
 ## Decision
 
 - The table `campaign__send_jobs` is owned by the campaign context. Statuses: `pending`, `running`, `done`, `failed`, `cancelled`.
-- The payload is frozen in [`contracts/jobs/send_job/v1.json`](../../contracts/jobs/send_job/v1.json) (`job_version: 1`).
+- The payload is frozen in [`contracts/jobs/send_job/v1.json`](../../contracts/jobs/send_job/v1.json) (`job_version: 1`). Since Step 5 the claim statement below is also a contract file, [`claim.sql`](../../contracts/jobs/send_job/claim.sql), checked byte for byte by the Python and Go tests ([ADR 0018](0018-go-sender-claims-and-hands-off.md)).
 - **Claim** is one statement:
 
   ```sql
