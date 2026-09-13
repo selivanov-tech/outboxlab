@@ -14,11 +14,22 @@ from app.contexts.messaging.application.ports.outbound_repository import (
     OutboundMessageRepositoryPort,
 )
 from app.contexts.messaging.application.ports.outbox_writer import OutboxEventWriterPort
+from app.contexts.messaging.application.ports.suppression_repository import (
+    SuppressionRepositoryPort,
+)
 from app.contexts.messaging.domain.inbound_message import InboundMessage
+from app.contexts.messaging.domain.intent import Intent
+from app.contexts.messaging.domain.suppression import Suppression, SuppressionReason
 
 _INBOUND_RECEIVED = "InboundReceived"
 _REPLY_MATCHED = "ReplyMatched"
 _REPLY_CLASSIFIED = "ReplyClassified"
+REPLY_CLASSIFIED_VERSION = 2
+
+_SUPPRESSION_REASONS = {
+    Intent.UNSUBSCRIBE: SuppressionReason.UNSUBSCRIBE,
+    Intent.BOUNCE: SuppressionReason.HARD_BOUNCE,
+}
 
 
 class PollInboxHandler:
@@ -28,6 +39,7 @@ class PollInboxHandler:
         outbound_repo: OutboundMessageRepositoryPort,
         inbound_repo: InboundMessageRepositoryPort,
         outbox: OutboxEventWriterPort,
+        suppressions: SuppressionRepositoryPort,
         receiver: EmailReceiverPort,
         classifier: IntentClassifierPort,
     ) -> None:
@@ -35,6 +47,7 @@ class PollInboxHandler:
         self._outbound_repo = outbound_repo
         self._inbound_repo = inbound_repo
         self._outbox = outbox
+        self._suppressions = suppressions
         self._receiver = receiver
         self._classifier = classifier
 
@@ -79,9 +92,10 @@ class PollInboxHandler:
                 },
             )
 
-            matched_outbound_id = match_reply(fetched, candidates)
-            if matched_outbound_id is not None:
-                inbound = inbound.matched_to(matched_outbound_id)
+            matched = match_reply(fetched, candidates)
+            if matched is not None:
+                candidates = [c for c in candidates if c.id != matched.id]
+                inbound = inbound.matched_to(matched.id)
                 await self._outbox.record(
                     _REPLY_MATCHED,
                     mailbox.workspace_id,
@@ -89,23 +103,39 @@ class PollInboxHandler:
                     {
                         "workspace_id": mailbox.workspace_id,
                         "inbound_id": inbound.id,
-                        "matched_outbound_id": matched_outbound_id,
+                        "matched_outbound_id": matched.id,
                         "provider_thread_id": inbound.provider_thread_id,
                     },
                 )
 
-                intent = await self._classifier.classify(
-                    fetched.subject, fetched.body_text or fetched.snippet
+                intent = (
+                    Intent.BOUNCE
+                    if fetched.is_bounce
+                    else await self._classifier.classify(
+                        fetched.subject, fetched.body_text or fetched.snippet
+                    )
                 )
                 inbound = inbound.classified_as(intent)
                 await self._inbound_repo.update(inbound)
+                suppression_reason = _SUPPRESSION_REASONS.get(intent)
+                if suppression_reason is not None:
+                    await self._suppressions.add(
+                        Suppression.new(
+                            workspace_id=mailbox.workspace_id,
+                            email=matched.to_email,
+                            reason=suppression_reason,
+                            source_inbound_id=inbound.id,
+                        )
+                    )
                 await self._outbox.record(
                     _REPLY_CLASSIFIED,
                     mailbox.workspace_id,
                     inbound.id,
                     {
+                        "event_version": REPLY_CLASSIFIED_VERSION,
                         "workspace_id": mailbox.workspace_id,
                         "inbound_id": inbound.id,
+                        "matched_outbound_id": matched.id,
                         "intent": intent.value,
                     },
                 )

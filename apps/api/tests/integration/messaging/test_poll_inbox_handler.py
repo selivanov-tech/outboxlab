@@ -1,4 +1,8 @@
+import json
+from pathlib import Path
 from typing import Any
+
+from jsonschema import Draft202012Validator
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +38,9 @@ from app.contexts.messaging.infrastructure.persistence.outbound_repo import (
 )
 from app.contexts.messaging.infrastructure.persistence.outbox_writer import (
     OutboxEventWriter,
+)
+from app.contexts.messaging.infrastructure.persistence.suppression_repo import (
+    SuppressionRepository,
 )
 from app.shared.util.clock import now
 
@@ -92,6 +99,7 @@ def _handler(
         OutboundMessageRepository(session),
         InboundMessageRepository(session),
         OutboxEventWriter(session),
+        SuppressionRepository(session),
         receiver,
         classifier,
     )
@@ -240,3 +248,147 @@ async def test_dedupe_on_second_run(
         .all()
     )
     assert list(stored_again) == ["g1"]
+
+
+async def _sent_outbound(
+    session: AsyncSession,
+    mailbox: MailboxView,
+    *,
+    to_email: str = "lead@example.com",
+    rfc822_message_id: str = "<m1@example.com>",
+    thread_id: str = "thread-1",
+) -> OutboundMessage:
+    repo = OutboundMessageRepository(session)
+    outbound = OutboundMessage.new(
+        workspace_id=mailbox.workspace_id,
+        mailbox_id=mailbox.id,
+        to_email=to_email,
+        subject="Hi",
+        body="Body",
+        rfc822_message_id=rfc822_message_id,
+    )
+    await repo.add(outbound)
+    await repo.mark_sent(outbound.sent(f"gmail-{thread_id}", thread_id))
+    return outbound
+
+
+async def _reply_classified_payload(session: AsyncSession) -> dict[str, Any]:
+    return (
+        (
+            await session.execute(
+                select(OutboxEventRow.payload).where(
+                    OutboxEventRow.event_type == "ReplyClassified"
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+
+
+async def test_reply_classified_v2_payload_matches_the_contract(
+    session: AsyncSession, contracts_dir: Path
+) -> None:
+    mailbox = await _seed_mailbox(session)
+    outbound = await _sent_outbound(session, mailbox)
+    reply = _fetched(
+        provider_message_id="g-reply", in_reply_to_header="<m1@example.com>"
+    )
+    receiver = _FakeReceiver(FetchResult(new_cursor="1", messages=(reply,)))
+
+    await _handler(session, receiver, _FakeClassifier(Intent.POSITIVE)).run_once(
+        mailbox
+    )
+
+    payload = await _reply_classified_payload(session)
+    schema = json.loads((contracts_dir / "events/reply_classified/v2.json").read_text())
+    Draft202012Validator(
+        schema, format_checker=Draft202012Validator.FORMAT_CHECKER
+    ).validate(payload)
+    assert payload["matched_outbound_id"] == str(outbound.id)
+    assert payload["event_version"] == 2
+
+
+async def test_bounce_skips_the_classifier_and_suppresses_the_address(
+    session: AsyncSession,
+) -> None:
+    mailbox = await _seed_mailbox(session)
+    await _sent_outbound(session, mailbox, to_email="Dead@Example.com")
+    bounce = _fetched(
+        provider_message_id="g-dsn",
+        provider_thread_id="thread-1",
+        from_email="mailer-daemon@googlemail.com",
+        subject="Delivery Status Notification (Failure)",
+        is_bounce=True,
+    )
+    receiver = _FakeReceiver(FetchResult(new_cursor="1", messages=(bounce,)))
+    classifier = _FakeClassifier(Intent.POSITIVE)
+
+    await _handler(session, receiver, classifier).run_once(mailbox)
+
+    assert classifier.calls == []
+    inbound_row = (await session.execute(select(InboundMessageRow))).scalars().one()
+    assert inbound_row.intent == "bounce"
+    assert (await _reply_classified_payload(session))["intent"] == "bounce"
+    assert await SuppressionRepository(session).is_suppressed(
+        mailbox.workspace_id, "dead@example.com"
+    )
+
+
+async def test_unsubscribe_reply_suppresses_the_address(
+    session: AsyncSession,
+) -> None:
+    mailbox = await _seed_mailbox(session)
+    await _sent_outbound(session, mailbox)
+    reply = _fetched(
+        provider_message_id="g-unsub", in_reply_to_header="<m1@example.com>"
+    )
+    receiver = _FakeReceiver(FetchResult(new_cursor="1", messages=(reply,)))
+
+    await _handler(session, receiver, _FakeClassifier(Intent.UNSUBSCRIBE)).run_once(
+        mailbox
+    )
+
+    assert await SuppressionRepository(session).is_suppressed(
+        mailbox.workspace_id, "lead@example.com"
+    )
+
+
+async def test_positive_reply_does_not_suppress(session: AsyncSession) -> None:
+    mailbox = await _seed_mailbox(session)
+    await _sent_outbound(session, mailbox)
+    reply = _fetched(provider_message_id="g-yes", in_reply_to_header="<m1@example.com>")
+    receiver = _FakeReceiver(FetchResult(new_cursor="1", messages=(reply,)))
+
+    await _handler(session, receiver, _FakeClassifier(Intent.POSITIVE)).run_once(
+        mailbox
+    )
+
+    assert not await SuppressionRepository(session).is_suppressed(
+        mailbox.workspace_id, "lead@example.com"
+    )
+
+
+async def test_an_outbound_message_matches_only_once_per_batch(
+    session: AsyncSession,
+) -> None:
+    mailbox = await _seed_mailbox(session)
+    outbound = await _sent_outbound(session, mailbox)
+    first = _fetched(provider_message_id="g-a", provider_thread_id="thread-1")
+    second = _fetched(provider_message_id="g-b", provider_thread_id="thread-1")
+    receiver = _FakeReceiver(FetchResult(new_cursor="1", messages=(first, second)))
+
+    await _handler(session, receiver, _FakeClassifier(Intent.POSITIVE)).run_once(
+        mailbox
+    )
+
+    rows = (
+        (
+            await session.execute(
+                select(InboundMessageRow).order_by(InboundMessageRow.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [row.matched_outbound_id for row in rows] == [outbound.id, None]

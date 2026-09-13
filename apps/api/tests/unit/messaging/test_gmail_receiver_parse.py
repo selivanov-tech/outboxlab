@@ -50,6 +50,7 @@ def test_parse_message_extracts_fields() -> None:
     assert message.in_reply_to_header == "<abc@example.com>"
     assert message.references_header == "<abc@example.com> <def@example.com>"
     assert message.received_at.year == 2023
+    assert message.is_bounce is False
 
 
 def _message_response(message_id: str) -> httpx.Response:
@@ -284,3 +285,92 @@ async def test_fetch_new_logs_warning_on_history_expired(
 
     assert result.new_cursor == "9999"
     assert "history expired" in caplog.text
+
+
+def _message(headers: dict[str, str], payload: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": "m1",
+        "threadId": "t1",
+        "labelIds": ["INBOX"],
+        "snippet": "",
+        "internalDate": "1700000000000",
+        "payload": {
+            **payload,
+            "headers": [{"name": k, "value": v} for k, v in headers.items()],
+        },
+    }
+
+
+def test_gmail_delivery_status_notification_is_a_bounce() -> None:
+    data = _message(
+        {
+            "From": "Mail Delivery Subsystem <mailer-daemon@googlemail.com>",
+            "To": "ops@example.com",
+            "Subject": "Delivery Status Notification (Failure)",
+            "X-Failed-Recipients": "nobody@example.com",
+            "Auto-Submitted": "auto-replied",
+            "Content-Type": 'multipart/report; boundary="b"; report-type=delivery-status',
+        },
+        {
+            "mimeType": "multipart/report",
+            "parts": [
+                {
+                    "mimeType": "text/plain",
+                    "body": {"data": _b64url("Address not found")},
+                },
+                {"mimeType": "message/delivery-status", "body": {"size": 120}},
+                {"mimeType": "text/rfc822-headers", "body": {"size": 300}},
+            ],
+        },
+    )
+
+    message = parse_message(data)
+
+    assert message.is_bounce is True
+    assert message.from_email == "mailer-daemon@googlemail.com"
+
+
+def test_failed_recipients_header_alone_marks_a_bounce() -> None:
+    data = _message(
+        {
+            "From": "notifications@mail.example.net",
+            "X-Failed-Recipients": "x@example.com",
+        },
+        {"mimeType": "text/plain", "body": {"data": _b64url("failed")}},
+    )
+
+    assert parse_message(data).is_bounce is True
+
+
+def test_postmaster_sender_is_a_bounce() -> None:
+    data = _message(
+        {"From": "postmaster@mail.example.net", "Subject": "Undeliverable"},
+        {"mimeType": "text/plain", "body": {"data": _b64url("undeliverable")}},
+    )
+
+    assert parse_message(data).is_bounce is True
+
+
+def test_auto_submitted_report_from_a_relay_is_a_bounce() -> None:
+    data = _message(
+        {
+            "From": "bounces@relay.example.net",
+            "Auto-Submitted": "auto-generated",
+            "Content-Type": "multipart/report; report-type=delivery-status",
+        },
+        {
+            "mimeType": "multipart/report",
+            "parts": [{"mimeType": "message/delivery-status", "body": {"size": 1}}],
+        },
+    )
+
+    assert parse_message(data).is_bounce is True
+
+
+def test_out_of_office_auto_reply_is_not_a_bounce() -> None:
+    data = _message(
+        {"From": "lead@example.com", "Auto-Submitted": "auto-replied"},
+        {"mimeType": "text/plain", "body": {"data": _b64url("I am away until Monday")}},
+    )
+
+    assert parse_message(data).is_bounce is False

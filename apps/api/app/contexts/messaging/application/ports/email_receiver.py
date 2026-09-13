@@ -14,6 +14,7 @@ class FetchedMessage:
     references_header: str | None
     received_at: datetime
     body_text: str = ""
+    is_bounce: bool = False
 
 
 @dataclass(frozen=True)

@@ -7,3 +7,4 @@ class Intent(StrEnum):
     OOO = "ooo"
     UNSUBSCRIBE = "unsubscribe"
     UNCLEAR = "unclear"
+    BOUNCE = "bounce"

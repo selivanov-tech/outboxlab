@@ -48,6 +48,9 @@ from app.contexts.messaging.infrastructure.persistence.outbound_repo import (
 from app.contexts.messaging.infrastructure.persistence.outbox_writer import (
     OutboxEventWriter,
 )
+from app.contexts.messaging.infrastructure.persistence.suppression_repo import (
+    SuppressionRepository,
+)
 from app.shared.infrastructure.db.engine import dispose_engine
 from app.shared.infrastructure.db.session import session_for_workspace
 from app.shared.util.clock import now
@@ -87,6 +90,7 @@ async def _poll_inbox(
             OutboundMessageRepository(session),
             InboundMessageRepository(session),
             OutboxEventWriter(session),
+            SuppressionRepository(session),
             receiver,
             classifier,
         )

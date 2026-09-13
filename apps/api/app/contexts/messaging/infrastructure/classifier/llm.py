@@ -13,6 +13,9 @@ _PROMPT = (
 )
 
 
+_CLASSIFIER_LABELS = frozenset(Intent) - {Intent.BOUNCE}
+
+
 class LlmIntentClassifier:
     def __init__(self, llm: LlmClient) -> None:
         self._llm = llm
@@ -23,7 +26,7 @@ class LlmIntentClassifier:
             answer = await self._llm.complete(
                 _PROMPT.format(subject=subject, text=text)
             )
-            return Intent(answer.strip().lower())
+            return _parse_label(answer)
         except (
             httpx.HTTPError,
             KeyError,
@@ -33,3 +36,10 @@ class LlmIntentClassifier:
             AttributeError,
         ):
             return await self._fallback.classify(subject, text)
+
+
+def _parse_label(answer: str) -> Intent:
+    intent = Intent(answer.strip().lower())
+    if intent not in _CLASSIFIER_LABELS:
+        raise ValueError(f"{intent} is not a classifier label")
+    return intent
