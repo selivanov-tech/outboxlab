@@ -2,7 +2,7 @@
 
 [← Back to the plan](README.md)
 
-**Status: code merged** — PR_STEP_7. Dashboards and a follow-up recording are optional and manual.
+**Status: code merged** — [PR #9](https://github.com/selivanov-tech/outboxlab/pull/9). Dashboards and a follow-up recording are optional and manual.
 
 ## Goal
 
