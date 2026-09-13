@@ -21,6 +21,16 @@ class MailboxRepository:
         row = (await self._session.execute(stmt)).scalars().first()
         return _to_domain(row) if row is not None else None
 
+    async def list_by_workspace(self, workspace_id: UUID) -> list[Mailbox]:
+        stmt = (
+            select(MailboxRow)
+            .where(MailboxRow.workspace_id == workspace_id)
+            .order_by(MailboxRow.created_at, MailboxRow.id)
+        )
+        return [
+            _to_domain(row) for row in (await self._session.execute(stmt)).scalars()
+        ]
+
     async def add(self, mailbox: Mailbox) -> None:
         self._session.add(_to_row(mailbox))
         await self._session.flush()

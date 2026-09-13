@@ -10,12 +10,16 @@ from app.contexts.campaign.application.commands.start_campaign import (
     StartCampaignResult,
 )
 from app.contexts.campaign.application.errors import (
+    CampaignHasNoLeadsError,
     CampaignNotFoundError,
     MailboxNotConnectedError,
 )
 from app.contexts.campaign.application.queries.get_campaign import (
     CampaignDetail,
     LeadView,
+)
+from app.contexts.campaign.application.queries.get_campaign_metrics import (
+    CampaignMetrics,
 )
 from app.contexts.campaign.application.queries.list_campaigns import CampaignSummary
 from app.contexts.campaign.domain.campaign import Campaign, StepDraft
@@ -24,6 +28,7 @@ from app.contexts.campaign.presentation.routes.campaigns import (
     add_leads_handler,
     create_campaign_handler,
     get_campaign_handler,
+    get_campaign_metrics_handler,
     list_campaigns_handler,
     start_campaign_handler,
 )
@@ -245,6 +250,59 @@ def test_start_unknown_campaign_is_404(stub: Callable[..., _StubHandler]) -> Non
     with TestClient(app) as client:
         response = client.post(
             f"/campaigns/{uuid.uuid7()}/start", headers=WORKSPACE_HEADERS
+        )
+
+    assert response.status_code == 404
+
+
+def test_start_without_leads_is_422(stub: Callable[..., _StubHandler]) -> None:
+    stub(start_campaign_handler).raises = CampaignHasNoLeadsError()
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/campaigns/{uuid.uuid7()}/start", headers=WORKSPACE_HEADERS
+        )
+
+    assert response.status_code == 422
+
+
+def test_campaign_metrics_are_returned(stub: Callable[..., _StubHandler]) -> None:
+    campaign_id = uuid.uuid7()
+    stub(get_campaign_metrics_handler).result = CampaignMetrics(
+        campaign_id=campaign_id,
+        leads=4,
+        contacted=3,
+        emails_sent=5,
+        replied=1,
+        reply_intents={"positive": 1},
+        bounced=1,
+        in_progress=1,
+        completed=1,
+        reply_rate=0.3333,
+        bounce_rate=0.3333,
+    )
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/campaigns/{campaign_id}/metrics", headers=WORKSPACE_HEADERS
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["campaign_id"] == str(campaign_id)
+    assert (body["contacted"], body["replied"], body["bounced"]) == (3, 1, 1)
+    assert body["reply_intents"] == {"positive": 1}
+    assert body["reply_rate"] == 0.3333
+
+
+def test_metrics_of_an_unknown_campaign_is_404(
+    stub: Callable[..., _StubHandler],
+) -> None:
+    stub(get_campaign_metrics_handler).raises = CampaignNotFoundError()
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/campaigns/{uuid.uuid7()}/metrics", headers=WORKSPACE_HEADERS
         )
 
     assert response.status_code == 404

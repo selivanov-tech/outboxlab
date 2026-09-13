@@ -23,8 +23,11 @@ def test_production_serves_campaigns_and_viewer_but_not_test_email() -> None:
     assert {
         "/campaigns",
         "/campaigns/{campaign_id}",
+        "/campaigns/{campaign_id}/metrics",
+        "/mailboxes",
         "/debug/state",
         "/viewer",
+        "/mcp",
     } <= paths
     assert "/send-test-email" not in paths
 

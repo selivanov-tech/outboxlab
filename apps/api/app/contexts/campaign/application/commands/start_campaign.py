@@ -2,7 +2,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from app.contexts.campaign.application.errors import CampaignNotFoundError
+from app.contexts.campaign.application.errors import (
+    CampaignHasNoLeadsError,
+    CampaignNotFoundError,
+)
 from app.contexts.campaign.application.ports.campaign_repository import (
     CampaignRepositoryPort,
 )
@@ -36,9 +39,10 @@ class StartCampaignHandler:
             raise CampaignNotFoundError
         if campaign.is_active:
             return StartCampaignResult(campaign=campaign, scheduled=0)
-        started, scheduled, jobs = campaign.start(
-            await self._leads.list_pending(campaign_id), moment
-        )
+        pending = await self._leads.list_pending(campaign_id)
+        if not pending:
+            raise CampaignHasNoLeadsError
+        started, scheduled, jobs = campaign.start(pending, moment)
         await self._campaigns.update_status(started)
         await self._leads.update_many(scheduled)
         await self._jobs.add_many(jobs)

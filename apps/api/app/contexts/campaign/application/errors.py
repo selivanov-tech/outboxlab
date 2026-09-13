@@ -4,3 +4,7 @@ class CampaignNotFoundError(Exception):
 
 class MailboxNotConnectedError(Exception):
     pass
+
+
+class CampaignHasNoLeadsError(Exception):
+    pass

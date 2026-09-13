@@ -15,10 +15,14 @@ from app.contexts.campaign.application.commands.start_campaign import (
     StartCampaignHandler,
 )
 from app.contexts.campaign.application.errors import (
+    CampaignHasNoLeadsError,
     CampaignNotFoundError,
     MailboxNotConnectedError,
 )
 from app.contexts.campaign.application.queries.get_campaign import GetCampaignHandler
+from app.contexts.campaign.application.queries.get_campaign_metrics import (
+    GetCampaignMetricsHandler,
+)
 from app.contexts.campaign.application.queries.list_campaigns import (
     ListCampaignsHandler,
 )
@@ -104,6 +108,22 @@ class StartCampaignResponse(BaseModel):
     scheduled: int
 
 
+class CampaignMetricsResponse(BaseModel):
+    campaign_id: UUID
+    leads: int
+    contacted: int = Field(description="Leads that received at least one step")
+    emails_sent: int
+    replied: int = Field(
+        description="Leads whose reply was classified, bounces excluded"
+    )
+    reply_intents: dict[str, int]
+    bounced: int
+    in_progress: int = Field(description="Leads pending, scheduled or between steps")
+    completed: int = Field(description="Leads that received every step")
+    reply_rate: float = Field(description="replied / contacted")
+    bounce_rate: float = Field(description="bounced / contacted")
+
+
 def create_campaign_handler(session: Session) -> CreateCampaignHandler:
     return CreateCampaignHandler(
         MailboxLookup(MailboxRepository(session)), CampaignRepository(session)
@@ -126,6 +146,12 @@ def add_leads_handler(session: Session) -> AddLeadsHandler:
     )
 
 
+def get_campaign_metrics_handler(session: Session) -> GetCampaignMetricsHandler:
+    return GetCampaignMetricsHandler(
+        CampaignRepository(session), LeadRepository(session)
+    )
+
+
 def start_campaign_handler(session: Session) -> StartCampaignHandler:
     return StartCampaignHandler(
         CampaignRepository(session), LeadRepository(session), SendJobRepository(session)
@@ -143,7 +169,15 @@ def _campaign_fields(campaign: Campaign) -> dict[str, object]:
     }
 
 
-@router.post("/campaigns", status_code=201, response_model=CampaignResponse)
+@router.post(
+    "/campaigns",
+    status_code=201,
+    response_model=CampaignResponse,
+    operation_id="create_campaign",
+    tags=["mcp"],
+    summary="Create a draft campaign with ordered steps, sent from the workspace mailbox",
+    responses={409: {"description": "No mailbox connected to this workspace"}},
+)
 async def create_campaign(
     request: CreateCampaignRequest,
     workspace_id: WorkspaceId,
@@ -169,7 +203,13 @@ async def create_campaign(
     return CampaignResponse.model_validate(_campaign_fields(campaign))
 
 
-@router.get("/campaigns", response_model=list[CampaignSummaryResponse])
+@router.get(
+    "/campaigns",
+    response_model=list[CampaignSummaryResponse],
+    operation_id="list_campaigns",
+    tags=["mcp"],
+    summary="List campaigns with lead counts by state",
+)
 async def list_campaigns(
     _: WorkspaceId,
     handler: Annotated[ListCampaignsHandler, Depends(list_campaigns_handler)],
@@ -187,7 +227,14 @@ async def list_campaigns(
     ]
 
 
-@router.get("/campaigns/{campaign_id}", response_model=CampaignDetailResponse)
+@router.get(
+    "/campaigns/{campaign_id}",
+    response_model=CampaignDetailResponse,
+    operation_id="get_campaign",
+    tags=["mcp"],
+    summary="Get a campaign with its steps and every lead's state",
+    responses={404: {"description": "Campaign not found"}},
+)
 async def get_campaign(
     campaign_id: UUID,
     _: WorkspaceId,
@@ -221,7 +268,14 @@ async def get_campaign(
     )
 
 
-@router.post("/campaigns/{campaign_id}/leads", response_model=AddLeadsResponse)
+@router.post(
+    "/campaigns/{campaign_id}/leads",
+    response_model=AddLeadsResponse,
+    operation_id="add_leads_to_campaign",
+    tags=["mcp"],
+    summary="Add lead email addresses; they are scheduled at once if the campaign is active",
+    responses={404: {"description": "Campaign not found"}},
+)
 async def add_leads(
     campaign_id: UUID,
     request: AddLeadsRequest,
@@ -237,7 +291,17 @@ async def add_leads(
     )
 
 
-@router.post("/campaigns/{campaign_id}/start", response_model=StartCampaignResponse)
+@router.post(
+    "/campaigns/{campaign_id}/start",
+    response_model=StartCampaignResponse,
+    operation_id="start_campaign",
+    tags=["mcp"],
+    summary="Start a campaign: schedule the first step for every pending lead (idempotent)",
+    responses={
+        404: {"description": "Campaign not found"},
+        422: {"description": "The campaign has no leads to start"},
+    },
+)
 async def start_campaign(
     campaign_id: UUID,
     _: WorkspaceId,
@@ -247,6 +311,32 @@ async def start_campaign(
         result = await handler.execute(campaign_id, now())
     except CampaignNotFoundError:
         raise _CAMPAIGN_NOT_FOUND
+    except CampaignHasNoLeadsError:
+        raise HTTPException(
+            status_code=422, detail="The campaign has no leads to start"
+        )
     return StartCampaignResponse(
         status=result.campaign.status.value, scheduled=result.scheduled
     )
+
+
+@router.get(
+    "/campaigns/{campaign_id}/metrics",
+    response_model=CampaignMetricsResponse,
+    operation_id="get_campaign_metrics",
+    tags=["mcp"],
+    summary="Get a campaign's sending, reply and bounce numbers",
+    responses={404: {"description": "Campaign not found"}},
+)
+async def get_campaign_metrics(
+    campaign_id: UUID,
+    _: WorkspaceId,
+    handler: Annotated[
+        GetCampaignMetricsHandler, Depends(get_campaign_metrics_handler)
+    ],
+) -> CampaignMetricsResponse:
+    try:
+        metrics = await handler.execute(campaign_id)
+    except CampaignNotFoundError:
+        raise _CAMPAIGN_NOT_FOUND
+    return CampaignMetricsResponse.model_validate(metrics, from_attributes=True)

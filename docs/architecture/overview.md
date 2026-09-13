@@ -11,7 +11,7 @@ apps/api/app/
     application/          use cases (commands / queries / handlers) and ports (Protocols)
     infrastructure/       adapters: SQLAlchemy models + repositories, Gmail, LLM clients, outbox writer
     presentation/         FastAPI routes for this context
-  shared/                 cross-cutting: DB engine, clock, request context, auth middleware, debug/health/version routes, the static viewer
+  shared/                 cross-cutting: DB engine, clock, request context, auth middleware, debug/health/version routes, the static viewer, the MCP server
   entrypoints/            process roots that cross context borders: api.py, worker.py, seed.py
   config.py               Settings (pydantic-settings)
 contracts/events/         versioned JSON Schemas for outbox events
@@ -29,7 +29,7 @@ Rules:
 | Context | Owns | State |
 |---|---|---|
 | `identity` | workspaces — the tenant registry, deliberately outside RLS so tenants can be listed — and workspace API keys | built (Steps 1, 4) |
-| `mailbox` | the connected Gmail mailbox, its address and sync cursor | built (Step 2) |
+| `mailbox` | the connected Gmail mailbox, its address, sync cursor, daily send cap and today's volume | built (Steps 2–3, 6) |
 | `messaging` | outbound and inbound messages, reply matching, intent classification, bounce detection, suppressions, sending guards, outbox events | built (Steps 2–3) |
 | `campaign` | campaigns, sequence steps, leads and their state machine, the send-job queue, the reply consumer | built (Step 3) |
 
@@ -50,6 +50,8 @@ The full model the sprint is walking toward. Names are the domain language; the 
 **Reply Handling** — `InboundMessage` (root), `Reply` linked to a lead. Value object `ReplyIntent`: `POSITIVE` / `NEGATIVE` / `OOO` / `UNSUBSCRIBE` / `UNCLEAR`, plus `BOUNCE` set by the adapter for delivery-status notifications (Step 3). Events: `InboundReceived`, `ReplyMatched`, `ReplyClassified`. Invariant: a `Reply` exists only when the inbound message matched an outbound one. Today this also lives inside `messaging`.
 
 **Billing** — parked. `Subscription`, `Invoice`, `MailboxQuota`.
+
+MCP: the API's tagged routes are also MCP tools at `/mcp/`, generated from the OpenAPI document; each tool call runs the route in-process with the caller's API key ([ADR 0019](../adr/0019-openapi-as-mcp.md)).
 
 ## Hexagonal communication
 

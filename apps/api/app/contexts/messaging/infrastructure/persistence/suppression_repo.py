@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,3 +38,9 @@ class SuppressionRepository:
             .limit(1)
         )
         return (await self._session.execute(stmt)).first() is not None
+
+    async def count_addresses(self, workspace_id: UUID) -> int:
+        stmt = select(func.count(func.distinct(SuppressionRow.email))).where(
+            SuppressionRow.workspace_id == workspace_id
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
