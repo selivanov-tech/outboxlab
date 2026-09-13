@@ -13,53 +13,88 @@ No Redis, no extra brokers. See [ADR 0001](../adr/0001-postgres-only-operational
 
 | Need | Solution | Status |
 |---|---|---|
-| Domain events between contexts | outbox table written in the same transaction | built (Step 2) |
-| Job queue for sends | `send_jobs` table claimed with `SELECT … FOR UPDATE SKIP LOCKED` | Step 3 |
-| Rate limit per mailbox | advisory lock per mailbox plus a daily counter / cap | Step 3 |
+| Domain events between contexts | outbox table written in the same transaction; consumer claims with `SKIP LOCKED` and a processed-events set | built (Steps 2–3) |
+| Job queue for sends | `campaign__send_jobs` claimed with `SELECT … FOR UPDATE SKIP LOCKED` and a lease | built (Step 3) |
+| Rate limit per mailbox | advisory transaction lock per mailbox plus a `count(*)` daily cap per UTC day | built (Step 3) |
+| Suppression list | `messaging__suppressions`, fed by bounces and unsubscribes | built (Step 3) |
 | Cache | in-process LRU or materialized views, if ever needed | not needed yet |
 | Pub / sub between processes | `LISTEN` / `NOTIFY`, if ever needed | not needed yet |
 
 ### Job queue shape (Step 3)
 
+Contract and outcomes: [ADR 0014](../adr/0014-send-job-queue-contract.md). Payload: [`contracts/jobs/send_job/v1.json`](../../contracts/jobs/send_job/v1.json).
+
 ```sql
 CREATE TABLE campaign__send_jobs (
-    id            UUID PRIMARY KEY,
-    workspace_id  UUID NOT NULL,
-    mailbox_id    UUID NOT NULL,
-    lead_id       UUID NOT NULL,
-    step_id       UUID NOT NULL,
-    payload       JSONB NOT NULL,
-    scheduled_at  TIMESTAMPTZ NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'pending',   -- pending / running / done / failed
-    attempts      INT NOT NULL DEFAULT 0,
-    locked_at     TIMESTAMPTZ,
-    locked_by     TEXT,
-    created_at    TIMESTAMPTZ NOT NULL
+    id                   UUID PRIMARY KEY,
+    workspace_id         UUID NOT NULL,
+    mailbox_id           UUID NOT NULL,
+    lead_id              UUID NOT NULL,
+    step_id              UUID NOT NULL,
+    payload              JSONB NOT NULL,
+    scheduled_at         TIMESTAMPTZ NOT NULL,
+    status               VARCHAR(16) NOT NULL,   -- pending / running / done / failed / cancelled
+    attempts             INT NOT NULL,
+    locked_at            TIMESTAMPTZ,
+    locked_by            VARCHAR(128),
+    last_error           TEXT,
+    outbound_message_id  UUID,                   -- set when sent; links a reply back to the lead
+    created_at           TIMESTAMPTZ NOT NULL,
+    updated_at           TIMESTAMPTZ NOT NULL
 );
-CREATE INDEX ix_send_jobs_pending ON campaign__send_jobs (scheduled_at, status) WHERE status = 'pending';
+CREATE INDEX ix_send_jobs_pending ON campaign__send_jobs (scheduled_at) WHERE status = 'pending';
+CREATE INDEX ix_send_jobs_running ON campaign__send_jobs (locked_at) WHERE status = 'running';
 ```
 
 ```sql
 -- The Python worker (Step 3) and the Go sender (Step 5) share this contract.
+-- :moment is the caller's clock; :lease_expired_before = :moment - 5 minutes.
 UPDATE campaign__send_jobs
-SET status = 'running', locked_at = now(), locked_by = $1, attempts = attempts + 1
+SET status = 'running', locked_at = :moment, locked_by = :worker_id,
+    attempts = attempts + 1, updated_at = :moment
 WHERE id IN (
     SELECT id FROM campaign__send_jobs
-    WHERE status = 'pending' AND scheduled_at <= now()
+    WHERE workspace_id = :workspace_id
+      AND ((status = 'pending' AND scheduled_at <= :moment)
+        OR (status = 'running' AND locked_at < :lease_expired_before))
     ORDER BY scheduled_at
-    LIMIT 10
+    LIMIT :limit
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, mailbox_id, lead_id, payload;
+RETURNING id, workspace_id, mailbox_id, lead_id, payload, attempts, scheduled_at;
 ```
 
 ### Rate limiter shape (Step 3)
 
+Inside the send transaction, after the suppression check ([ADR 0015](../adr/0015-sending-guards-in-messaging.md)):
+
 ```sql
--- one worker per mailbox at a time
-SELECT pg_try_advisory_xact_lock(hashtext($mailbox_id::text));
--- true  → check the daily counter, increment, send
--- false → skip; another worker is sending from this mailbox
+-- one sender per mailbox at a time; held until the transaction ends
+SELECT pg_try_advisory_xact_lock(hashtext(:mailbox_id));
+-- false → busy: the job goes back to pending in a few seconds
+
+-- daily cap, UTC calendar day
+SELECT count(*) FROM messaging__outbound_messages
+WHERE mailbox_id = :mailbox_id
+  AND provider_message_id IS NOT NULL
+  AND created_at >= :start_of_utc_day;
+-- >= mailbox__mailboxes.daily_send_cap → capped: pending again at the next UTC midnight
+```
+
+### Outbox consumer shape (Step 3)
+
+[ADR 0013](../adr/0013-outbox-consumer-processed-events.md):
+
+```sql
+SELECT e.id, e.workspace_id, e.payload
+FROM messaging__outbox_events e
+WHERE e.workspace_id = :workspace_id
+  AND e.event_type = 'ReplyClassified'
+  AND NOT EXISTS (SELECT 1 FROM campaign__processed_events p WHERE p.event_id = e.id)
+ORDER BY e.created_at, e.id
+LIMIT :limit
+FOR UPDATE OF e SKIP LOCKED;
+-- stop the lead, cancel its pending jobs, INSERT INTO campaign__processed_events — one transaction
 ```
 
 ### Why no Redis
@@ -74,7 +109,7 @@ SELECT pg_try_advisory_xact_lock(hashtext($mailbox_id::text));
 | Service | fly app | Notes |
 |---|---|---|
 | API (FastAPI) | `outboxlab-api` | deployed by CI on every push to `main` |
-| Worker (Gmail poller) | `outboxlab-worker` | same image, `python -m app.entrypoints.worker`; deployed by hand with `make deploy-worker`; needs its own secrets |
+| Worker (Gmail poller, reply consumer, send-job drain) | `outboxlab-worker` | same image, `python -m app.entrypoints.worker`; deployed by hand with `make deploy-worker`; needs its own secrets |
 | Web (state viewer) | `outboxlab-web` | static placeholder today |
 | Sender (Go) | later | Step 5 |
 

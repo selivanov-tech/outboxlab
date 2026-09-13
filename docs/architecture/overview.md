@@ -30,8 +30,8 @@ Rules:
 |---|---|---|
 | `identity` | workspaces — the tenant registry, deliberately outside RLS so tenants can be listed | built (Step 1) |
 | `mailbox` | the connected Gmail mailbox, its address and sync cursor | built (Step 2) |
-| `messaging` | outbound and inbound messages, reply matching, intent classification, outbox events | built (Step 2) |
-| `campaign` | campaigns, sequence steps, leads and their state machine | table stub; logic in Step 3 |
+| `messaging` | outbound and inbound messages, reply matching, intent classification, bounce detection, suppressions, sending guards, outbox events | built (Steps 2–3) |
+| `campaign` | campaigns, sequence steps, leads and their state machine, the send-job queue, the reply consumer | built (Step 3) |
 
 Tenancy: every tenant table has row-level security keyed by the session GUC `app.workspace_id`. The API sets it from the `X-Workspace-Id` header; the worker sets it from `MAILBOX_WORKSPACE_ID`. Tests run as the non-superuser role `outboxlab_app` so the policies are actually exercised.
 
@@ -45,34 +45,45 @@ The full model the sprint is walking toward. Names are the domain language; the 
 
 **Campaign** — `Campaign` (root) with `Step` and `Lead`; lead states `PENDING` / `SCHEDULED` / `SENT` / `PAUSED` / `DONE` / `FAILED`. Events: `CampaignCreated`, `LeadAdded`, `StepScheduled`, `LeadPaused`, `LeadCompleted`, `LeadInvalidated`. Invariant: `Lead.state` changes only through the aggregate.
 
-**Sending** — `SendTask` (root: mailbox, lead, step, schedule, attempts). Events: `MessageSent` (with the RFC 822 `Message-ID` for later matching), `MessageBounced`, `MessageDeferred`, `SendTaskFailed`. Invariant: no `MessageSent` without a valid rate-limit window. Today this lives inside `messaging`; it is the first extraction candidate (Step 5).
+**Sending** — `SendTask` (root: mailbox, lead, step, schedule, attempts). Events: `MessageSent` (with the RFC 822 `Message-ID` for later matching), `MessageBounced`, `MessageDeferred`, `SendTaskFailed`. Invariant: no `MessageSent` without a valid rate-limit window. Today the guards live inside `messaging` and the job queue inside `campaign`; Sending is the first extraction candidate (Step 5).
 
-**Reply Handling** — `InboundMessage` (root), `Reply` linked to a lead. Value object `ReplyIntent`: `POSITIVE` / `NEGATIVE` / `OOO` / `UNSUBSCRIBE` / `UNCLEAR` (Step 3 adds `BOUNCE`). Events: `InboundReceived`, `ReplyMatched`, `ReplyClassified`. Invariant: a `Reply` exists only when the inbound message matched an outbound one. Today this also lives inside `messaging`.
+**Reply Handling** — `InboundMessage` (root), `Reply` linked to a lead. Value object `ReplyIntent`: `POSITIVE` / `NEGATIVE` / `OOO` / `UNSUBSCRIBE` / `UNCLEAR`, plus `BOUNCE` set by the adapter for delivery-status notifications (Step 3). Events: `InboundReceived`, `ReplyMatched`, `ReplyClassified`. Invariant: a `Reply` exists only when the inbound message matched an outbound one. Today this also lives inside `messaging`.
 
 **Billing** — parked. `Subscription`, `Invoice`, `MailboxQuota`.
 
 ## Hexagonal communication
 
-Contexts never call each other directly. The contract between contexts is an event with a fixed JSON Schema in `contracts/events/<event>/v<n>.json`; the transport is just an adapter. Today the only transport is the Postgres outbox table written inside the same transaction as the state change ([ADR 0006](../adr/0006-transactional-outbox-inline.md)). A dispatcher and the first consumer arrive in Step 3. Moving to a broker later is an infrastructure migration with known risks (data ownership, backfill, retries, idempotency), not a rewrite.
+Contexts never call each other directly. The contract between contexts is an event with a fixed JSON Schema in `contracts/events/<event>/v<n>.json`; the transport is just an adapter. Today the only transport is the Postgres outbox table written inside the same transaction as the state change ([ADR 0006](../adr/0006-transactional-outbox-inline.md)). The first consumer — the campaign context reacting to `ReplyClassified` — runs as a step of the worker with a processed-events set ([ADR 0013](../adr/0013-outbox-consumer-processed-events.md)). Moving to a broker later is an infrastructure migration with known risks (data ownership, backfill, retries, idempotency), not a rewrite.
 
-A schema change means a new `v2.json` next to `v1.json` and a handler that accepts both versions.
+A schema change means a new `v2.json` next to `v1.json` and a handler that accepts both versions. The payload carries `event_version`; a missing field means v1. `ReplyClassified` is the first event at v2.
 
-**Flow 1 — a reply pauses a lead (Step 2 + Step 3):**
-
-```
-worker poll → Gmail adapter → InboundReceived
-  → match by In-Reply-To / References → ReplyMatched
-  → classify (rules or LLM) → ReplyClassified
-  → campaign consumer: Campaign.pause_lead() → LeadPaused
-  → sending consumer: cancel future send jobs
-```
-
-**Flow 2 — a bounce degrades a mailbox (Step 3+):**
+**Flow 1 — a reply pauses a lead (built in Steps 2–3):**
 
 ```
-Gmail adapter detects a delivery-status notification → intent BOUNCE
-  → mark the address dead, write a suppression row
-  → mailbox health recomputed; above threshold → HealthDegraded
+worker: poll → Gmail adapter → InboundReceived
+  → match by In-Reply-To / References / thread / subject + address → ReplyMatched
+  → classify (rules or LLM) → ReplyClassified v2 (+ suppression row on unsubscribe)
+worker: dispatch → campaign consumer claims ReplyClassified (SKIP LOCKED, processed-events set)
+  → Campaign.stop_on_reply() → lead paused
+  → the lead's pending send jobs cancelled, in the same transaction
+```
+
+**Flow 2 — a bounce stops a lead (built in Step 3):**
+
+```
+Gmail adapter flags a delivery-status notification → intent BOUNCE, classifier skipped
+  → suppression row (hard_bounce) for the matched recipient → ReplyClassified v2
+  → campaign consumer: lead failed (bounced), pending jobs cancelled
+  → not built yet: mailbox bounce-rate health, HealthDegraded
+```
+
+**Flow 3 — a campaign send (built in Step 3):**
+
+```
+POST /campaigns/{id}/start → leads scheduled, step-1 jobs in campaign__send_jobs
+worker: drain → claim (SKIP LOCKED, lease) → per job, one transaction:
+  suppression check → advisory lock per mailbox → daily cap (UTC day) → Gmail send
+  → lead sent / done, next step job at sent_at + delay
 ```
 
 ## Key patterns

@@ -1,6 +1,6 @@
 # ADR 0006 — Transactional outbox written inline, no dispatcher yet
 
-**Status:** accepted (Step 2)
+**Status:** accepted (Step 2); the first consumer is described in [ADR 0013](0013-outbox-consumer-processed-events.md)
 
 ## Context
 

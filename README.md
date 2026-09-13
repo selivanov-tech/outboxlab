@@ -2,25 +2,49 @@
 
 A cold-email outreach engine built as a proof-of-work: clean DDD / hexagonal architecture on a **Postgres-only operational stack** (no Redis, no extra brokers), with an LLM behind a port, not in the core.
 
-**Status: Step 2 of 7 — the real email loop.** Send an email through the Gmail API, poll the inbox, match the reply to the original message, classify its intent, and record events in a transactional outbox. Campaign automation (auto-pause, suppression, send caps) and the MCP server are the next steps — see Roadmap.
+**Status: Step 3 of 7 — the campaign state machine.** A campaign sends its sequence through a Postgres job queue; a classified reply pauses the lead and cancels its future sends; bounces and unsubscribes feed a suppression list; every mailbox has a daily cap. Hardening and the demo, the Go sender, the MCP server and metrics are the next steps — see Roadmap.
 
 ## What works today
 
 ```
-POST /send-test-email ──▶ Gmail API send ──▶ outbound_messages (rfc822 Message-ID stored)
-                                                     │
-worker: poll inbox ──▶ Gmail API receiver ──▶ match reply by In-Reply-To / References (subject "Re:" fallback)
-                                                     │
-                                         strip quoted text ──▶ intent classifier ──▶ inbound_messages + outbox events
-                                                                 (deterministic rules, optional LLM adapter)
+POST /campaigns → /leads → /start ─▶ campaign__send_jobs (pending, step 1 now, step 2 later)
+                                              │
+worker: drain ─▶ claim (SKIP LOCKED, lease) ─▶ suppression · mailbox lock · daily cap ─▶ Gmail API send
+                                              │
+worker: poll ─▶ Gmail API receiver ─▶ match reply (In-Reply-To / References / thread / subject + address)
+                                              │
+                    delivery failure? ─▶ intent bounce      otherwise ─▶ classifier (rules or LLM)
+                                              │
+                    inbound_messages + suppressions + outbox event ReplyClassified v2
+                                              │
+worker: dispatch ─▶ campaign consumer ─▶ lead paused (failed on bounce) + pending jobs cancelled
 ```
 
-- **Send** — `POST /send-test-email` sends through the Gmail API and stores the outbound message with its RFC 822 `Message-ID`.
-- **Receive** — a worker process polls the mailbox with a sync cursor, skips the mailbox's own sent mail, and turns raw MIME into a `FetchedMessage`.
-- **Match** — a reply is linked to the outbound message by `In-Reply-To` / `References`; a normalised subject match is the fallback.
-- **Classify** — intent is one of `positive · negative · ooo · unsubscribe · unclear`. An LLM classifier (Anthropic or OpenAI, chosen by `LLM_PROVIDER`) is a pluggable adapter behind the same port. It is on by default (`LLM_ENABLED=true`) but only activates when the chosen provider's key is set, and it falls back to the deterministic rules on any API error — so a keyless environment (CI, bare demo) stays fully offline. Classification reads the **de-quoted** body, not the snippet, so quoted history does not trigger false positives.
-- **Record** — `inbound_received`, `reply_matched`, `reply_classified` events are written to an outbox table in the same transaction; the JSON Schemas live in `contracts/events/`. There is no dispatcher yet — consumers arrive with Step 3.
-- **Inspect** — `GET /debug/state` shows workspace / outbound / inbound counts, the mailbox sync cursor, intent counts and the last outbox events; `GET /health`, `GET /version`, `GET /workspaces/me`. The messaging and debug routes are mounted only when `APP_ENV != production`.
+- **Campaigns** — a campaign has ordered steps (`subject`, `body`, `delay_seconds`) and leads. Lead state (`pending → scheduled → sent → done`, or `paused` / `failed`) changes only through the `Campaign` aggregate. `POST /campaigns/{id}/start` is idempotent.
+- **Send queue** — jobs live in `campaign__send_jobs` and are claimed with `SELECT … FOR UPDATE SKIP LOCKED` and a 5-minute lease. Each job runs in its own transaction; a send error retries with backoff and fails the lead after three attempts. The payload is frozen in `contracts/jobs/send_job/v1.json` for other sender implementations.
+- **Sending guards** — before every send (campaign or test email): the recipient must not be suppressed, the mailbox takes a Postgres advisory lock, and today's sent count (UTC day) must be under the mailbox's `daily_send_cap` (default 20). A capped job waits for the next UTC day.
+- **Receive and match** — a worker polls the mailbox with a sync cursor, skips its own sent mail, and links a reply to the outbound message by `In-Reply-To` / `References`, then thread, then a normalised subject from the same address.
+- **Bounces and unsubscribes** — the Gmail adapter flags delivery-status notifications; they skip the classifier, get intent `bounce`, suppress the address and fail the lead. An `unsubscribe` reply suppresses the address too.
+- **Classify** — intent is one of `positive · negative · ooo · unsubscribe · unclear` (plus `bounce` from the adapter). An LLM classifier (Anthropic or OpenAI, chosen by `LLM_PROVIDER`) sits behind the same port; it only activates when the chosen provider's key is set and falls back to deterministic rules on any error, so a keyless environment stays offline. Classification reads the **de-quoted** body, not the snippet.
+- **Outbox and consumer** — `InboundReceived`, `ReplyMatched`, `ReplyClassified` are written to an outbox table in the same transaction (JSON Schemas in `contracts/events/`). The campaign context consumes `ReplyClassified` with a processed-events set: at-least-once delivery, one effect per event.
+- **Inspect** — `GET /campaigns`, `GET /campaigns/{id}` (leads with state, stop reason, reply intent, next send time), `GET /debug/state` (counts, sync cursor, intents, lead states, job statuses, last outbox events), `GET /health`, `GET /version`, `GET /workspaces/me`. Campaign, messaging and debug routes are mounted only when `APP_ENV != production`, because the API has no auth yet.
+
+## Demo path (local stack)
+
+1. Seed the workspace and mailbox; wait until `/debug/state` shows a sync cursor.
+2. `POST /campaigns` with two steps (the second with a short `delay_seconds`), `POST /campaigns/{id}/leads` with an address you control, `POST /campaigns/{id}/start`.
+3. The worker sends step 1; `GET /campaigns/{id}` shows the lead `sent` and its next send time.
+4. Reply from the lead mailbox. Within one poll the reply is matched and classified, the lead turns `paused`, and the step-2 job is `cancelled`.
+
+The full runbook with commands is on the [Step 3 page](docs/plan/step-3-campaign-state-machine.md#live-campaign-runbook-manual-real-credentials).
+
+## Trade-offs and what is intentionally not built
+
+- **Postgres is the whole ops stack.** Queue, lock, cap, outbox and suppressions are tables and SQL; latency is the poll interval (seconds). Moving any of them out is an infrastructure change after measuring queue latency and lock contention.
+- **At-least-once sending.** A send still in flight after its lease, or a commit that fails after Gmail accepted the message, can be sent twice on retry. Exactly-once would need provider-side idempotency.
+- **One worker, one workspace.** The worker serves `MAILBOX_WORKSPACE_ID`; multi-tenant polling and an OAuth web flow are parked.
+- **No auth yet.** Write routes are non-production only; workspace API keys come with the MCP step.
+- **Not built:** bounce classes and a mailbox health score, follow-ups threaded into the same Gmail conversation, campaign pause / resume, templating, CSV import, a UI (Step 4 adds a read-only viewer), metrics (Step 7).
 
 ## Architecture
 
@@ -30,21 +54,21 @@ Bounded contexts under `apps/api/app/contexts/`, each with `domain / application
 |---|---|
 | `identity` | workspaces (the tenant registry; the one table deliberately outside RLS) |
 | `mailbox` | the connected Gmail mailbox and its sync cursor |
-| `messaging` | outbound / inbound messages, reply matching, intent, outbox events |
-| `campaign` | table stub only — the state machine arrives in Step 3 |
+| `messaging` | outbound / inbound messages, reply matching, intent, bounce detection, suppressions, sending guards, outbox events |
+| `campaign` | campaigns, steps, leads and their state machine; the send-job queue; the reply consumer |
 
 Rules the code follows:
 
 - **Domain and application depend on ports only.** `EmailSenderPort`, `EmailReceiverPort`, `IntentClassifierPort`, `OutboxEventWriterPort` and the repositories are `Protocol`s; Gmail, the LLM SDKs and SQLAlchemy live in `infrastructure/`.
 - **Tenant isolation in the database.** Every tenant table has row-level security keyed by a per-session workspace GUC; tests run as the non-superuser `outboxlab_app` role so the policies are actually exercised.
-- **Postgres is the whole ops stack.** Today that means the transactional outbox table; queues, locks and rate limits (Step 3+) will use `SELECT … FOR UPDATE SKIP LOCKED` and advisory locks. No Redis.
+- **Postgres is the whole ops stack.** The transactional outbox, the send-job queue (`SELECT … FOR UPDATE SKIP LOCKED`), an advisory lock per mailbox and a `count(*)` daily cap. No Redis.
 - **LLM is optional.** If the key is missing or `LLM_ENABLED=false`, the deterministic classifier answers alone. The demo never depends on a vendor.
 - **Every table is prefixed with its context** (`identity__workspaces`, `messaging__inbound_messages`, …) so ownership is visible from the table name.
 
 ## Stack
 
 - API: FastAPI (Python 3.14, uv, SQLAlchemy 2.0 async, Pydantic v2), Alembic migrations.
-- Worker: Python Gmail poller in the same project (`apps/api/app/entrypoints/worker.py`, run as `python -m app.entrypoints.worker`); own process + own fly app, same image. Go sender extraction is Step 5.
+- Worker: Python process in the same project (`apps/api/app/entrypoints/worker.py`, run as `python -m app.entrypoints.worker`) — polls Gmail, dispatches classified replies, drains send jobs; own process + own fly app, same image. Go sender extraction is Step 5.
 - Web: a static placeholder page served by Caddy. The Next.js state viewer is Step 4.
 - DB: local postgres 17 (dev) / Neon (prod).
 - Deploy: fly.io.
@@ -71,7 +95,7 @@ The full plan, one page per step, lives in [`docs/plan/`](docs/plan/README.md). 
 1. ~~[Step 0](docs/plan/step-0-local-dev-stack.md) — local dev stack, Fly deploy path~~
 2. ~~[Step 1](docs/plan/step-1-walking-skeleton.md) — walking skeleton: identity context, workspaces, CI, live URL~~
 3. ~~[Step 2](docs/plan/step-2-real-email-loop.md) — real email loop: Gmail send, inbox polling, reply matching, intent classification, outbox~~
-4. [Step 3](docs/plan/step-3-campaign-state-machine.md) — campaign state machine: a classified reply pauses the lead and cancels future sends; bounce as a first-class signal feeding suppression; per-mailbox daily send caps.
+4. ~~[Step 3](docs/plan/step-3-campaign-state-machine.md) — campaign state machine: a classified reply pauses the lead and cancels future sends; bounce as a first-class signal feeding suppression; per-mailbox daily send caps.~~
 5. [Step 4](docs/plan/step-4-hardening-and-demo.md) — hardening, demo, README v1.
 6. [Step 5](docs/plan/step-5-go-sender-extraction.md) — Go sender extraction behind the same port.
 7. [Step 6](docs/plan/step-6-mcp-server.md) — MCP server over the API (OpenAPI-as-MCP).
@@ -113,8 +137,9 @@ Endpoints (replace with your `API_DOMAIN`):
 - `GET /health` — liveness
 - `GET /version` — version + git SHA + APP_ENV
 - `GET /workspaces/me` — the workspace from the `X-Workspace-Id` header
-- `GET /debug/state` — DB ping, counts, mailbox sync cursor, intents, last outbox events (non-production only)
-- `POST /send-test-email` — send one email through the connected Gmail mailbox; needs `X-Workspace-Id` (non-production only)
+- `GET /debug/state` — DB ping, counts, mailbox sync cursor, intents, lead states, send-job statuses, last outbox events (non-production only)
+- `POST /send-test-email` — send one email through the connected Gmail mailbox; needs `X-Workspace-Id`; 409 for a suppressed recipient, 429 for a busy or capped mailbox (non-production only)
+- `POST /campaigns`, `POST /campaigns/{id}/leads`, `POST /campaigns/{id}/start`, `GET /campaigns`, `GET /campaigns/{id}` — campaign API; needs `X-Workspace-Id` (non-production only)
 
 ## Daily
 
