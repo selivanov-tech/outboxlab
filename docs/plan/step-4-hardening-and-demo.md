@@ -2,7 +2,7 @@
 
 [← Back to the plan](README.md)
 
-**Status: code merged** — PR_STEP_4. The demo video and the live run on the deployed URL are done by hand.
+**Status: code merged** — [PR #6](https://github.com/selivanov-tech/outboxlab/pull/6). The demo video and the live run on the deployed URL are done by hand.
 
 ## Goal
 
