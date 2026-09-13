@@ -2,7 +2,7 @@
 
 A small cold-email outreach engine built as a proof of work: a campaign sends a short sequence from a Gmail mailbox, a reply is matched and classified, and the lead is paused before the follow-up goes out. The code is a modular monolith with DDD bounded contexts and ports, on a **Postgres-only operational stack** — the job queue, locks, send caps, suppression list and outbox are tables and SQL, with no Redis and no broker. An LLM classifier sits behind a port with a deterministic fallback, so the demo never depends on a vendor.
 
-**Status: Step 5 of 7 — Go sender extraction.** Next: MCP access, metrics. See [Roadmap](#roadmap).
+**Status: Step 6 of 7 — MCP access.** Next: metrics and README v2. See [Roadmap](#roadmap).
 
 ## Demo path
 
@@ -45,6 +45,7 @@ Commands for a live run are in [Run the demo](#run-the-demo).
 - **Bounces and unsubscribes** — delivery-status notifications are flagged in the Gmail adapter, skip the classifier, suppress the address and fail the lead. An unsubscribe reply also suppresses the address.
 - **Outbox and consumer** — `InboundReceived`, `ReplyMatched` and `ReplyClassified` are written in the same transaction as the state change ([schemas](contracts/events/)). The campaign context consumes `ReplyClassified` with a processed-events set: at-least-once delivery, one effect per event.
 - **Access** — workspace API keys (`Authorization: Bearer olab_…`). In production a key is the only way in; locally the `X-Workspace-Id` header also works.
+- **MCP** — the same API is an MCP server at `/mcp/`: an agent creates campaigns, adds leads, starts them and reads metrics with the workspace API key. See [MCP access](docs/mcp.md).
 - **Viewer** — `/viewer/`: campaigns, leads with state, stop reason, reply intent and next send time, workspace counts and recent events, refreshed every 5 seconds.
 
 ## Architecture
@@ -79,6 +80,16 @@ More: [architecture overview](docs/architecture/overview.md), [infrastructure](d
 - `POST /send-test-email` is not idempotent.
 - If Gmail's history window has expired, the receiver re-baselines and skips the gap (logged as a warning).
 
+## MCP
+
+The API is also an MCP server at `https://<api-domain>/mcp/`. Tools are generated from the routes tagged `mcp` in the OpenAPI document, and each call runs the route in-process with the caller's API key ([ADR 0019](docs/adr/0019-openapi-as-mcp.md)). Claude Code:
+
+```bash
+claude mcp add --transport http outboxlab https://<api-domain>/mcp/ --header "Authorization: Bearer <api-key>"
+```
+
+Tools: `create_campaign`, `add_leads_to_campaign`, `start_campaign`, `list_campaigns`, `get_campaign`, `get_campaign_metrics`, `list_mailboxes`. Client configs and error codes: [docs/mcp.md](docs/mcp.md).
+
 ## Sender extraction
 
 Sending is the first extraction candidate. Step 5 moved the claim loop into Go without touching the campaign or reply domain ([ADR 0018](docs/adr/0018-go-sender-claims-and-hands-off.md)).
@@ -99,7 +110,7 @@ Switch locally: set `SENDER_IMPL=go` and `INTERNAL_API_TOKEN` in `.env`, run `ma
 
 ## Stack
 
-- API: FastAPI, Pydantic v2, SQLAlchemy 2.0 async, Alembic (Python 3.14, uv). The API also serves the viewer.
+- API: FastAPI, Pydantic v2, SQLAlchemy 2.0 async, Alembic (Python 3.14, uv). The API also serves the viewer and the MCP endpoint (FastMCP).
 - Worker: a separate process from the same project (`python -m app.entrypoints.worker`) — polls Gmail, dispatches classified replies, drains send jobs.
 - Sender (optional): a Go 1.26 service (`apps/sender-go`, pgx) that claims send jobs and hands them to the API.
 - Database: Postgres 17 locally, Neon in production.
@@ -128,7 +139,7 @@ docs/            plan (one page per step), architecture notes, ADRs
 4. ~~[Step 3](docs/plan/step-3-campaign-state-machine.md) — campaign state machine, send queue, bounce and unsubscribe suppression, daily caps~~
 5. ~~[Step 4](docs/plan/step-4-hardening-and-demo.md) — hardening and demo: API keys, viewer, smoke tests, README v1~~
 6. ~~[Step 5](docs/plan/step-5-go-sender-extraction.md) — Go sender on the same job contract, switched by configuration~~
-7. [Step 6](docs/plan/step-6-mcp-server.md) — MCP server over the API (OpenAPI-as-MCP).
+7. ~~[Step 6](docs/plan/step-6-mcp-server.md) — MCP server over the API (OpenAPI-as-MCP)~~
 8. [Step 7](docs/plan/step-7-observability.md) — observability, README v2.
 
 ## First-time setup
@@ -177,7 +188,7 @@ Use a **separate** lead mailbox you control; the worker ignores mail sent by the
 
 ## API
 
-Every route except `/health`, `/version` and `/viewer/` needs a workspace: `Authorization: Bearer <api-key>`, or `X-Workspace-Id: <uuid>` outside production.
+Every route except `/health`, `/version`, `/viewer/` and the MCP tool list needs a workspace: `Authorization: Bearer <api-key>`, or `X-Workspace-Id: <uuid>` outside production.
 
 | Route | What it does |
 |---|---|
@@ -186,8 +197,11 @@ Every route except `/health`, `/version` and `/viewer/` needs a workspace: `Auth
 | `GET /workspaces/me` | the caller's workspace |
 | `POST /campaigns` | create a campaign with steps (uses the workspace's mailbox) |
 | `POST /campaigns/{id}/leads` | add leads; scheduled at once if the campaign is active |
-| `POST /campaigns/{id}/start` | start the campaign (idempotent) |
+| `POST /campaigns/{id}/start` | start the campaign (idempotent; 422 if it has no leads) |
 | `GET /campaigns`, `GET /campaigns/{id}` | campaigns with lead counts; one campaign with steps and leads |
+| `GET /campaigns/{id}/metrics` | leads, contacted, emails sent, replies by intent, bounces, reply and bounce rates |
+| `GET /mailboxes` | mailboxes with the daily cap, sent today, remaining today, suppressed addresses |
+| `/mcp/` | MCP endpoint (streamable HTTP): the routes above as tools — see [docs/mcp.md](docs/mcp.md) |
 | `GET /debug/state` | the workspace's message, lead and job counts, sync cursor, recent events |
 | `POST /send-test-email` | one email outside any campaign — non-production only; 409 for a suppressed recipient, 429 for a busy or capped mailbox |
 
