@@ -2,7 +2,7 @@
 
 [← Back to the plan](README.md)
 
-**Status: code merged** — PR_STEP_6. The demo with Claude Desktop / Claude Code against a running API is recorded by hand.
+**Status: code merged** — [PR #8](https://github.com/selivanov-tech/outboxlab/pull/8). The demo with Claude Desktop / Claude Code against a running API is recorded by hand.
 
 ## Goal
 
