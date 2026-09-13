@@ -4,6 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 _EXPECTED_TABLES = {
     "identity__workspaces",
     "campaign__campaigns",
+    "campaign__steps",
+    "campaign__leads",
+    "campaign__send_jobs",
     "mailbox__mailboxes",
     "messaging__outbound_messages",
     "messaging__inbound_messages",
@@ -12,6 +15,9 @@ _EXPECTED_TABLES = {
 
 _RLS_FORCED_TABLES = {
     "campaign__campaigns",
+    "campaign__steps",
+    "campaign__leads",
+    "campaign__send_jobs",
     "mailbox__mailboxes",
     "messaging__outbound_messages",
     "messaging__inbound_messages",
