@@ -190,6 +190,11 @@ async def _run() -> None:
             receiver = GmailApiReceiver(client, token_provider)
             sender = GmailApiSender(client, token_provider)
             classifier = build_intent_classifier(settings, client)
+            _log(
+                "loops: poll inbox -> dispatch classified replies -> drain send jobs; "
+                f"workspace {settings.mailbox_workspace_id or 'not set'}; "
+                f"classifier {classifier.__class__.__name__}"
+            )
             while True:
                 idle_reason = await _tick(
                     settings, receiver, classifier, sender, worker_id

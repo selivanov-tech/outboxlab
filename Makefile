@@ -4,15 +4,15 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infra/dev/docker-compose.yml --env-file .env
 CERT_DIR := infra/dev/proxy/certs
 
-# Domains are read from .env (gitignored). Never hardcode them here.
+# The domain and demo settings are read from .env (gitignored). Never hardcode them here.
 # tr -d '\r' strips CRLF if .env was edited on Windows; $(strip) trims whitespace.
 API_DOMAIN := $(strip $(shell test -f .env && grep -E '^API_DOMAIN=' .env | head -1 | cut -d= -f2- | tr -d '\r'))
-WEB_DOMAIN := $(strip $(shell test -f .env && grep -E '^WEB_DOMAIN=' .env | head -1 | cut -d= -f2- | tr -d '\r'))
-LOCAL_DOMAINS := $(strip $(API_DOMAIN) $(WEB_DOMAIN))
+ENV_APP_ENV := $(strip $(shell test -f .env && grep -E '^APP_ENV=' .env | head -1 | cut -d= -f2- | tr -d '\r'))
+ENV_WORKSPACE_ID := $(strip $(shell test -f .env && grep -E '^MAILBOX_WORKSPACE_ID=' .env | head -1 | cut -d= -f2- | tr -d '\r'))
+LOCAL_DOMAINS := $(API_DOMAIN)
 
 define require_domains
 @test -n "$(API_DOMAIN)" || { echo "API_DOMAIN not set in .env (run: make env, then edit .env)"; exit 1; }
-@test -n "$(WEB_DOMAIN)" || { echo "WEB_DOMAIN not set in .env (run: make env, then edit .env)"; exit 1; }
 endef
 
 # CI-facing targets (deploy, check-leaks) live in their own fragment so CI can
@@ -29,7 +29,7 @@ help:  ## Show available targets
 setup: env  ## First-time bootstrap: create .env, then print next steps
 	@echo ""
 	@echo "Next steps (run in order, after editing .env):"
-	@echo "  1. Edit .env       — set API_DOMAIN, WEB_DOMAIN, GOOGLE_* secrets"
+	@echo "  1. Edit .env       — set API_DOMAIN, GOOGLE_* secrets"
 	@echo "  2. make certs      — generate local TLS certs (reads domains from .env)"
 	@echo "  3. make hosts-add  — point local domains at 127.0.0.1 (uses sudo)"
 	@echo "  4. make up         — start containers"
@@ -72,7 +72,7 @@ up:  ## Start all containers
 	$(COMPOSE) up -d
 	@echo ""
 	@echo "API:    https://$(API_DOMAIN)"
-	@echo "Web:    https://$(WEB_DOMAIN)"
+	@echo "Viewer: https://$(API_DOMAIN)/viewer/"
 	@echo "Logs:   make logs"
 
 .PHONY: down
@@ -127,6 +127,27 @@ migration:  ## Create a new migration (use: make migration name="add foo")
 .PHONY: seed
 seed:  ## Seed default workspace + mailbox into local DB
 	$(COMPOSE) exec api uv run python -m app.entrypoints.seed
+
+.PHONY: api-key
+api-key:  ## Print a new API key for MAILBOX_WORKSPACE_ID (shown once)
+	$(COMPOSE) exec api uv run python -m app.entrypoints.issue_api_key
+
+# ---- Demo ----
+
+.PHONY: smoke-readonly
+smoke-readonly:  ## Read-only smoke test against the local api container (sends no email)
+	$(COMPOSE) exec -T -e SMOKE_WORKSPACE_ID=$(ENV_WORKSPACE_ID) api bash -s -- readonly http://127.0.0.1:8000 < scripts/smoke.sh
+
+.PHONY: smoke
+smoke:  ## Full smoke test: real send, reply by hand, lead pauses (SMOKE_LEAD_EMAIL=<address>)
+	@test -n "$(SMOKE_LEAD_EMAIL)" || { echo "Usage: make smoke SMOKE_LEAD_EMAIL=<address you control>"; exit 1; }
+	$(COMPOSE) exec -T -e SMOKE_WORKSPACE_ID=$(ENV_WORKSPACE_ID) -e SMOKE_LEAD_EMAIL=$(SMOKE_LEAD_EMAIL) api bash -s -- full http://127.0.0.1:8000 < scripts/smoke.sh
+
+.PHONY: demo-reset
+demo-reset:  ## Local only: show, then with CONFIRM=yes delete, campaigns and messages of MAILBOX_WORKSPACE_ID
+	@test "$(ENV_APP_ENV)" = "local" || { echo "demo-reset refuses: APP_ENV in .env is '$(ENV_APP_ENV)', not 'local'"; exit 1; }
+	@test -n "$(ENV_WORKSPACE_ID)" || { echo "demo-reset refuses: MAILBOX_WORKSPACE_ID is not set in .env"; exit 1; }
+	@$(COMPOSE) exec -T postgres psql -X -v ON_ERROR_STOP=1 -v workspace_id=$(ENV_WORKSPACE_ID) -v confirm=$(if $(filter yes,$(CONFIRM)),true,false) -U $${POSTGRES_USER:-outboxlab} -d $${POSTGRES_DB:-outboxlab} < infra/dev/demo_reset.sql
 
 .PHONY: test
 test:  ## Run api tests

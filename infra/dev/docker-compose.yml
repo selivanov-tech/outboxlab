@@ -72,24 +72,11 @@ services:
       postgres:
         condition: service_healthy
 
-  web:
-    build:
-      context: ../..
-      dockerfile: infra/dev/web/Dockerfile
-    restart: unless-stopped
-    env_file: ../../.env
-    volumes:
-      # Mount at /srv where Caddy serves from. Step 4 swap to Next.js dev server.
-      - ../../apps/web:/srv
-    expose:
-      - "3000"
-
   proxy:
     image: caddy:2.9-alpine
     restart: unless-stopped
     environment:
       API_DOMAIN: ${API_DOMAIN:?API_DOMAIN must be set in .env}
-      WEB_DOMAIN: ${WEB_DOMAIN:?WEB_DOMAIN must be set in .env}
     volumes:
       - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./proxy/certs:/certs:ro
@@ -99,8 +86,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      web:
-        condition: service_started
 
 volumes:
   pgdata:
