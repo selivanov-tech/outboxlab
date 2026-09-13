@@ -73,3 +73,14 @@ async def test_falls_back_when_openai_content_is_null() -> None:
         result = await classifier.classify("Re: offer", "not interested, thanks")
 
     assert result is Intent.NEGATIVE
+
+
+async def test_falls_back_when_llm_answers_bounce() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _anthropic_response("bounce")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        classifier = LlmIntentClassifier(AnthropicChatClient(client, api_key="k"))
+        result = await classifier.classify("Re: offer", "not interested, thanks")
+
+    assert result is Intent.NEGATIVE

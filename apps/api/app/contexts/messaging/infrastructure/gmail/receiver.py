@@ -24,6 +24,7 @@ _MESSAGES_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
 _BODY_MAX_CHARS = 2000
 _QUOTE_HEADER = re.compile(r"^On\b.*\bwrote:\s*$")
 _QUOTE_LINE_MARKERS = ("-----Original Message-----",)
+_BOUNCE_SENDER_LOCAL_PARTS = frozenset({"mailer-daemon", "postmaster"})
 
 
 class _HistoryGoneError(Exception):
@@ -135,17 +136,46 @@ def parse_message(data: dict[str, Any]) -> FetchedMessage:
     received_at = datetime.fromtimestamp(
         int(data.get("internalDate", "0")) / 1000, tz=UTC
     )
+    from_email = parseaddr(headers.get("from", ""))[1].lower()
     return FetchedMessage(
         provider_message_id=data["id"],
         provider_thread_id=data["threadId"],
-        from_email=parseaddr(headers.get("from", ""))[1].lower(),
+        from_email=from_email,
         subject=headers.get("subject", ""),
         snippet=data.get("snippet", ""),
         in_reply_to_header=headers.get("in-reply-to"),
         references_header=headers.get("references"),
         received_at=received_at,
         body_text=_extract_body(payload),
+        is_bounce=_is_bounce(headers, payload, from_email),
     )
+
+
+def _is_bounce(
+    headers: dict[str, str], payload: dict[str, Any], from_email: str
+) -> bool:
+    if "x-failed-recipients" in headers:
+        return True
+    if from_email.split("@", 1)[0] in _BOUNCE_SENDER_LOCAL_PARTS:
+        return True
+    auto_submitted = headers.get("auto-submitted", "").strip().lower()
+    return auto_submitted.startswith("auto-") and _has_delivery_status(payload)
+
+
+def _has_delivery_status(part: dict[str, Any]) -> bool:
+    mime_type = part.get("mimeType", "").lower()
+    if mime_type == "message/delivery-status":
+        return True
+    part_headers = {
+        header["name"].lower(): header["value"] for header in part.get("headers", [])
+    }
+    content_type = part_headers.get("content-type", "").lower().replace('"', "")
+    if (
+        mime_type == "multipart/report"
+        and "report-type=delivery-status" in content_type
+    ):
+        return True
+    return any(_has_delivery_status(sub) for sub in part.get("parts", []))
 
 
 def _extract_body(payload: dict[str, Any]) -> str:

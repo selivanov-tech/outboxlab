@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "outboxlab/events/reply_classified/v2",
+  "title": "ReplyClassified",
+  "description": "v2 adds event_version, matched_outbound_id and the bounce intent. Consumers treat a payload without event_version as v1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_type",
+    "event_version",
+    "workspace_id",
+    "inbound_id",
+    "matched_outbound_id",
+    "intent"
+  ],
+  "properties": {
+    "event_type": { "const": "ReplyClassified" },
+    "event_version": { "const": 2 },
+    "workspace_id": { "type": "string", "format": "uuid" },
+    "inbound_id": { "type": "string", "format": "uuid" },
+    "matched_outbound_id": { "type": "string", "format": "uuid" },
+    "intent": {
+      "type": "string",
+      "enum": ["positive", "negative", "ooo", "unsubscribe", "unclear", "bounce"]
+    }
+  }
+}

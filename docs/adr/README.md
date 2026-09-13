@@ -16,3 +16,6 @@ Short records of the decisions that shape this codebase. Format: context → dec
 | [0010](0010-fly-deploy-with-release-migrations.md) | fly.io deploy gated by CI, migrations in the release command |
 | [0011](0011-domains-only-in-env.md) | Hostnames live only in `.env`; a leak check guards tracked files |
 | [0012](0012-no-code-for-future-use.md) | No code for future use |
+| [0013](0013-outbox-consumer-processed-events.md) | Outbox consumer: dispatcher in the worker with a processed-events set; event versions in the payload |
+| [0014](0014-send-job-queue-contract.md) | Send-job queue contract: claim with `SKIP LOCKED` and a lease, at-least-once sending, frozen job payload |
+| [0015](0015-sending-guards-in-messaging.md) | Sending guards in the messaging send path: suppression, advisory lock per mailbox, daily cap per UTC day |

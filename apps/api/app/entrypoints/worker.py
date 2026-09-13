@@ -7,12 +7,18 @@ from uuid import UUID
 import httpx
 
 from app.config import Settings, get_settings
+from app.contexts.campaign.application.handle_classified_replies import (
+    HandleClassifiedRepliesHandler,
+)
 from app.contexts.campaign.application.process_send_jobs import (
     ClaimDueSendJobsHandler,
     ProcessClaimedSendJobHandler,
 )
 from app.contexts.campaign.infrastructure.messaging.email_dispatch import (
     MessagingEmailDispatch,
+)
+from app.contexts.campaign.infrastructure.messaging.reply_feed import (
+    ClassifiedReplyFeed,
 )
 from app.contexts.campaign.infrastructure.persistence.campaign_repo import (
     CampaignRepository,
@@ -48,11 +54,15 @@ from app.contexts.messaging.infrastructure.persistence.outbound_repo import (
 from app.contexts.messaging.infrastructure.persistence.outbox_writer import (
     OutboxEventWriter,
 )
+from app.contexts.messaging.infrastructure.persistence.suppression_repo import (
+    SuppressionRepository,
+)
 from app.shared.infrastructure.db.engine import dispose_engine
 from app.shared.infrastructure.db.session import session_for_workspace
 from app.shared.util.clock import now
 
 SEND_BATCH_SIZE = 10
+REPLY_BATCH_SIZE = 50
 
 
 def _log(message: str) -> None:
@@ -87,6 +97,7 @@ async def _poll_inbox(
             OutboundMessageRepository(session),
             InboundMessageRepository(session),
             OutboxEventWriter(session),
+            SuppressionRepository(session),
             receiver,
             classifier,
         )
@@ -94,6 +105,21 @@ async def _poll_inbox(
     if processed:
         _log(f"processed {processed} new reply(ies)")
     return ""
+
+
+async def _dispatch_classified_replies(workspace_id: UUID) -> None:
+    async with session_for_workspace(workspace_id) as session:
+        stopped = await HandleClassifiedRepliesHandler(
+            ClassifiedReplyFeed(session),
+            CampaignRepository(session),
+            LeadRepository(session),
+            SendJobRepository(session),
+        ).run_once(workspace_id=workspace_id, limit=REPLY_BATCH_SIZE, moment=now())
+    for lead in stopped:
+        _log(
+            f"lead {lead.id} is {lead.state} ({lead.stop_reason}, "
+            f"intent {lead.reply_intent}); future sends cancelled"
+        )
 
 
 async def _drain_send_jobs(
@@ -138,6 +164,10 @@ async def _tick(
         idle_reason = await _poll_inbox(workspace_id, receiver, classifier)
     except Exception as exc:
         _log(f"poll error ({exc.__class__.__name__}): {exc}")
+    try:
+        await _dispatch_classified_replies(workspace_id)
+    except Exception as exc:
+        _log(f"reply dispatch error ({exc.__class__.__name__}): {exc}")
     try:
         await _drain_send_jobs(workspace_id, sender, worker_id)
     except Exception as exc:

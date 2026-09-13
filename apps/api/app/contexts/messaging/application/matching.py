@@ -1,5 +1,4 @@
 import re
-from uuid import UUID
 
 from app.contexts.messaging.application.ports.email_receiver import FetchedMessage
 from app.contexts.messaging.domain.outbound_message import OutboundMessage
@@ -9,9 +8,9 @@ _SUBJECT_PREFIX = re.compile(r"^(re|fwd|fw)\s*:\s*", re.IGNORECASE)
 
 def match_reply(
     inbound: FetchedMessage, candidates: list[OutboundMessage]
-) -> UUID | None:
+) -> OutboundMessage | None:
     by_message_id = {
-        normalized: candidate.id
+        normalized: candidate
         for candidate in candidates
         if (normalized := _normalize_message_id(candidate.rfc822_message_id))
     }
@@ -25,7 +24,7 @@ def match_reply(
             return by_message_id[reference]
 
     by_thread = {
-        candidate.provider_thread_id: candidate.id
+        candidate.provider_thread_id: candidate
         for candidate in candidates
         if candidate.provider_thread_id is not None
     }
@@ -35,8 +34,11 @@ def match_reply(
     inbound_subject = _normalize_subject(inbound.subject)
     if inbound_subject:
         for candidate in candidates:
-            if _normalize_subject(candidate.subject) == inbound_subject:
-                return candidate.id
+            if (
+                candidate.to_email.lower() == inbound.from_email.lower()
+                and _normalize_subject(candidate.subject) == inbound_subject
+            ):
+                return candidate
 
     return None
 

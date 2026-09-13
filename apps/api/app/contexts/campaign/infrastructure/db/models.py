@@ -154,4 +154,18 @@ class SendJob(Base):
     )
 
 
-__all__ = ["Campaign", "Lead", "SendJob", "Step"]
+class ProcessedEvent(Base):
+    __tablename__ = "campaign__processed_events"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("identity__workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+__all__ = ["Campaign", "Lead", "ProcessedEvent", "SendJob", "Step"]

@@ -211,3 +211,44 @@ async def test_follow_up_for_a_paused_lead_is_cancelled(
         SendJobStatus.DONE.value,
         SendJobStatus.CANCELLED.value,
     ]
+
+
+class _BrokenAdapterSender:
+    async def send(
+        self,
+        *,
+        mailbox_email: str,
+        to_email: str,
+        subject: str,
+        body: str,
+        rfc822_message_id: str,
+    ) -> SentEmail:
+        raise KeyError("threadId")
+
+
+async def test_a_non_http_adapter_error_is_retried_like_a_send_error(
+    session: AsyncSession,
+) -> None:
+    tenant = await seed_tenant(session)
+    await start_campaign(session, tenant, ["lead@example.com"])
+    moment = now() + timedelta(seconds=1)
+    jobs = await ClaimDueSendJobsHandler(SendJobRepository(session)).execute(
+        workspace_id=tenant.workspace_id,
+        worker_id="worker-1",
+        limit=10,
+        moment=moment,
+    )
+    handler = ProcessClaimedSendJobHandler(
+        CampaignRepository(session),
+        LeadRepository(session),
+        SendJobRepository(session),
+        MessagingEmailDispatch(session, _BrokenAdapterSender()),
+    )
+
+    outcomes = [await handler.execute(job, moment) for job in jobs]
+
+    assert outcomes == [SendJobOutcome.RETRYING]
+    (job,) = await _jobs(session, tenant)
+    assert job.status == SendJobStatus.PENDING.value
+    assert job.last_error is not None and job.last_error.startswith("KeyError")
+    assert await _outbound(session, tenant) == []
