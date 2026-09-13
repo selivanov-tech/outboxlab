@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import DateTime, Integer, text, update
+from sqlalchemy import DateTime, Integer, func, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from app.contexts.campaign.domain.send_job import (
     SendJobPayload,
     SendJobStatus,
 )
+from app.contexts.campaign.infrastructure.db.models import Lead as LeadRow
 from app.contexts.campaign.infrastructure.db.models import SendJob as SendJobRow
 
 CLAIM_SQL = text(
@@ -145,6 +146,23 @@ class SendJobRepository:
 
     async def cancel(self, job_id: UUID, moment: datetime) -> None:
         await self._set(job_id, moment, status=SendJobStatus.CANCELLED.value)
+
+    async def next_send_at_by_lead(self, campaign_id: UUID) -> dict[UUID, datetime]:
+        stmt = (
+            select(SendJobRow.lead_id, func.min(SendJobRow.scheduled_at))
+            .join(LeadRow, LeadRow.id == SendJobRow.lead_id)
+            .where(
+                LeadRow.campaign_id == campaign_id,
+                SendJobRow.status.in_(
+                    [SendJobStatus.PENDING.value, SendJobStatus.RUNNING.value]
+                ),
+            )
+            .group_by(SendJobRow.lead_id)
+        )
+        return {
+            lead_id: scheduled_at
+            for lead_id, scheduled_at in (await self._session.execute(stmt)).all()
+        }
 
     async def _reschedule(
         self,

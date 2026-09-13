@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contexts.campaign.domain.lead import Lead, LeadState, StopReason
@@ -60,6 +60,21 @@ class LeadRepository:
             row.reply_intent = lead.reply_intent
             row.updated_at = lead.updated_at
         await self._session.flush()
+
+    async def count_by_state(
+        self, campaign_ids: Sequence[UUID]
+    ) -> dict[UUID, dict[LeadState, int]]:
+        if not campaign_ids:
+            return {}
+        stmt = (
+            select(LeadRow.campaign_id, LeadRow.state, func.count())
+            .where(LeadRow.campaign_id.in_(campaign_ids))
+            .group_by(LeadRow.campaign_id, LeadRow.state)
+        )
+        counts: dict[UUID, dict[LeadState, int]] = {}
+        for campaign_id, state, count in (await self._session.execute(stmt)).all():
+            counts.setdefault(campaign_id, {})[LeadState(state)] = int(count)
+        return counts
 
 
 def _to_row(lead: Lead) -> LeadRow:

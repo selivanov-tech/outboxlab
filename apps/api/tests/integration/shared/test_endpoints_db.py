@@ -29,4 +29,6 @@ def test_debug_state_reports_messaging_counts() -> None:
     assert isinstance(body["inbound_count"], int)
     assert isinstance(body["intents"], dict)
     assert isinstance(body["recent_events"], list)
+    assert isinstance(body["leads"], dict)
+    assert isinstance(body["send_jobs"], dict)
     assert "mailbox_last_sync_cursor" in body

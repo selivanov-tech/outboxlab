@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import get_settings
+from app.contexts.campaign.presentation.routes import campaigns_router
 from app.contexts.identity.presentation.routes import workspaces_router
 from app.contexts.messaging.presentation.routes import messaging_router
 from app.shared.infrastructure.db.engine import dispose_engine
@@ -24,8 +25,9 @@ app.add_middleware(WorkspaceContextMiddleware)
 app.include_router(health_router)
 app.include_router(version_router)
 app.include_router(workspaces_router)
-# /send-test-email triggers a real outbound email and is gated to non-prod
-# (the Loom runs locally). debug_router is gated for the same reason.
+# Campaign and /send-test-email routes cause real outbound email and the API has
+# no auth yet, so they are gated to non-prod. debug_router is gated for the same reason.
 if get_settings().app_env != "production":
+    app.include_router(campaigns_router)
     app.include_router(messaging_router)
     app.include_router(debug_router)
