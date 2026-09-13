@@ -16,12 +16,18 @@ from app.contexts.identity.presentation.routes import workspaces_router
 from app.contexts.mailbox.presentation.routes import mailboxes_router
 from app.contexts.messaging.presentation.routes import messaging_router
 from app.shared.infrastructure.db.engine import dispose_engine
+from app.shared.presentation.http_metrics import HttpMetricsMiddleware
 from app.shared.presentation.mcp import build_mcp_server
 from app.shared.presentation.middleware import (
     ApiKeyResolver,
     WorkspaceContextMiddleware,
 )
-from app.shared.presentation.routes import debug_router, health_router, version_router
+from app.shared.presentation.routes import (
+    debug_router,
+    health_router,
+    metrics_router,
+    version_router,
+)
 from app.shared.presentation.viewer.app import viewer_app
 
 
@@ -50,7 +56,9 @@ def create_app(
         resolve_api_key=resolve_api_key,
         accept_workspace_header=not production,
     )
+    app.add_middleware(HttpMetricsMiddleware)
     app.include_router(health_router)
+    app.include_router(metrics_router)
     app.include_router(version_router)
     app.include_router(workspaces_router)
     app.include_router(campaigns_router)

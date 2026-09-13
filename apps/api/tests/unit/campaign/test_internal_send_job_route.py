@@ -6,10 +6,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
+from app.contexts.campaign.application.ports.send_job_repository import (
+    ClaimedSendJob,
+)
 from app.contexts.campaign.application.process_send_jobs import (
+    ProcessedSendJob,
     SendJobNotClaimedError,
     SendJobOutcome,
 )
+from app.contexts.campaign.domain.send_job import SendJobPayload
+from app.shared.util.clock import now
 from app.contexts.campaign.presentation.routes.internal_send_jobs import (
     process_send_job_by_id_handler,
 )
@@ -25,11 +31,28 @@ class _StubHandler:
         self.raises: Exception | None = None
         self.calls: list[dict[str, Any]] = []
 
-    async def execute(self, **kwargs: Any) -> SendJobOutcome:
+    async def execute(self, **kwargs: Any) -> ProcessedSendJob:
         self.calls.append(kwargs)
         if self.raises is not None:
             raise self.raises
-        return self.result
+        job = ClaimedSendJob(
+            id=kwargs["job_id"],
+            workspace_id=kwargs["workspace_id"],
+            mailbox_id=uuid.uuid7(),
+            lead_id=uuid.uuid7(),
+            payload=SendJobPayload(
+                campaign_id=uuid.uuid7(),
+                lead_id=uuid.uuid7(),
+                step_id=uuid.uuid7(),
+                step_position=1,
+                to_email="lead@example.com",
+                subject="Hello",
+                body="First touch",
+            ),
+            attempts=1,
+            scheduled_at=now(),
+        )
+        return ProcessedSendJob(job=job, outcome=self.result)
 
 
 def _settings(internal_api_token: str = TOKEN) -> Settings:

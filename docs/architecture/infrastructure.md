@@ -19,6 +19,7 @@ No Redis, no extra brokers. See [ADR 0001](../adr/0001-postgres-only-operational
 | Suppression list | `messaging__suppressions`, fed by bounces and unsubscribes | built (Step 3) |
 | Cache | in-process LRU or materialized views, if ever needed | not needed yet |
 | Pub / sub between processes | `LISTEN` / `NOTIFY`, if ever needed | not needed yet |
+| Metrics | Prometheus client in each process: API `GET /metrics`, worker on `WORKER_METRICS_PORT` | built (Step 7, [ADR 0020](../adr/0020-prometheus-metrics.md)) |
 
 ### Job queue shape (Step 3)
 

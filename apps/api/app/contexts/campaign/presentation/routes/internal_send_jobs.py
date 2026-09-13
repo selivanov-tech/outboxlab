@@ -14,6 +14,7 @@ from app.contexts.campaign.application.process_send_jobs import (
     ProcessSendJobByIdHandler,
     SendJobNotClaimedError,
 )
+from app.contexts.campaign.infrastructure.metrics import record_send_job_outcome
 from app.contexts.campaign.infrastructure.messaging.email_dispatch import (
     gmail_email_dispatch,
 )
@@ -79,9 +80,10 @@ async def process_send_job(
     ],
 ) -> ProcessSendJobResponse:
     try:
-        outcome = await handler.execute(
+        processed = await handler.execute(
             job_id=job_id, workspace_id=workspace_id, moment=now()
         )
     except SendJobNotClaimedError:
         raise HTTPException(status_code=409, detail="Send job is not claimed")
-    return ProcessSendJobResponse(job_id=job_id, outcome=outcome.value)
+    record_send_job_outcome(processed.job, processed.outcome, now())
+    return ProcessSendJobResponse(job_id=job_id, outcome=processed.outcome.value)

@@ -2,7 +2,7 @@
 
 A small cold-email outreach engine built as a proof of work: a campaign sends a short sequence from a Gmail mailbox, a reply is matched and classified, and the lead is paused before the follow-up goes out. The code is a modular monolith with DDD bounded contexts and ports, on a **Postgres-only operational stack** — the job queue, locks, send caps, suppression list and outbox are tables and SQL, with no Redis and no broker. An LLM classifier sits behind a port with a deterministic fallback, so the demo never depends on a vendor.
 
-**Status: Step 6 of 7 — MCP access.** Next: metrics and README v2. See [Roadmap](#roadmap).
+**Status: all seven steps are built (README v2).** Live runs with real Gmail credentials, the demo recordings and production deploys of the worker and the Go sender are manual; each [step page](docs/plan/README.md) lists what is left.
 
 ## Demo path
 
@@ -46,6 +46,7 @@ Commands for a live run are in [Run the demo](#run-the-demo).
 - **Outbox and consumer** — `InboundReceived`, `ReplyMatched` and `ReplyClassified` are written in the same transaction as the state change ([schemas](contracts/events/)). The campaign context consumes `ReplyClassified` with a processed-events set: at-least-once delivery, one effect per event.
 - **Access** — workspace API keys (`Authorization: Bearer olab_…`). In production a key is the only way in; locally the `X-Workspace-Id` header also works.
 - **MCP** — the same API is an MCP server at `/mcp/`: an agent creates campaigns, adds leads, starts them and reads metrics with the workspace API key. See [MCP access](docs/mcp.md).
+- **Metrics** — `GET /metrics` on the API and a metrics port on the worker: emails sent, send failures by reason, classified replies by intent, paused leads, queue latency, HTTP requests by route template ([ADR 0020](docs/adr/0020-prometheus-metrics.md)).
 - **Viewer** — `/viewer/`: campaigns, leads with state, stop reason, reply intent and next send time, workspace counts and recent events, refreshed every 5 seconds.
 
 ## Architecture
@@ -63,15 +64,26 @@ Bounded contexts under `apps/api/app/contexts/`, each with `domain / application
 - **Tenant isolation in the database.** Every tenant table has row-level security keyed by a per-transaction workspace setting; tests run as a non-superuser role so the policies are exercised.
 - **Every table is prefixed with its context** (`campaign__send_jobs`, `messaging__suppressions`, …).
 
-More: [architecture overview](docs/architecture/overview.md), [infrastructure](docs/architecture/infrastructure.md), [decision records](docs/adr/README.md), [the 7-step plan](docs/plan/README.md).
+### How it is built
+
+- **DDD boundaries.** Four bounded contexts, each with `domain / application / infrastructure / presentation`. Domain and application code depend only on ports; only infrastructure crosses a context border, through a local port and adapter ([ADR 0002](docs/adr/0002-modular-monolith-with-bounded-contexts.md)). Lead state changes only inside the `Campaign` aggregate.
+- **Transactional outbox and consumer.** Messaging writes `ReplyClassified` in the same transaction as the reply; the campaign context consumes it with `SKIP LOCKED` and a processed-events set, so delivery is at least once and the effect happens once ([ADR 0006](docs/adr/0006-transactional-outbox-inline.md), [ADR 0013](docs/adr/0013-outbox-consumer-processed-events.md)).
+- **Postgres job queue and send guards.** `campaign__send_jobs` with a lease; every send checks suppressions, takes a per-mailbox advisory lock and respects a daily cap per UTC day ([ADR 0014](docs/adr/0014-send-job-queue-contract.md), [ADR 0015](docs/adr/0015-sending-guards-in-messaging.md)).
+- **Extraction path.** A Go sender claims jobs with the same statement file and hands each job to the API, switched by configuration, with no domain change ([ADR 0018](docs/adr/0018-go-sender-claims-and-hands-off.md)).
+- **MCP.** The tagged routes are MCP tools generated from the OpenAPI document; each call is authorized with the caller's workspace key ([ADR 0019](docs/adr/0019-openapi-as-mcp.md)).
+- **Observability.** Handlers return results and the composition roots record Prometheus metrics; the Go sender logs JSON ([ADR 0020](docs/adr/0020-prometheus-metrics.md)).
+
+More: [architecture overview](docs/architecture/overview.md), [infrastructure](docs/architecture/infrastructure.md), [scale and trade-offs](docs/architecture/scale-and-tradeoffs.md), [decision records](docs/adr/README.md), [the 7-step plan](docs/plan/README.md).
 
 ## Trade-offs and what is intentionally not built
+
+What breaks first as load grows, and what would move out next: [scale and trade-offs](docs/architecture/scale-and-tradeoffs.md).
 
 - **Postgres is the whole ops stack.** Latency is the poll interval (seconds). The queue or the rate limiter moves out only after measuring queue latency, lock contention and pool saturation.
 - **At-least-once sending.** A send still in flight when its lease expires, or a commit that fails after Gmail accepted the message, can be sent twice.
 - **One worker, one workspace.** The worker serves `MAILBOX_WORKSPACE_ID`; a multi-tenant worker and an OAuth web flow are parked.
 - **Minimal auth.** One kind of credential: a workspace API key issued from the command line. No users, sessions, key management or rotation.
-- **Not built:** bounce classes and a mailbox health score, follow-ups threaded into the same Gmail conversation, campaign pause / resume, templating, CSV import, a create / edit UI, metrics (Step 7).
+- **Not built:** bounce classes and a mailbox health score, follow-ups threaded into the same Gmail conversation, campaign pause / resume, templating, CSV import, a create / edit UI, dashboards and alerts.
 
 **Known gaps**
 
@@ -113,6 +125,7 @@ Switch locally: set `SENDER_IMPL=go` and `INTERNAL_API_TOKEN` in `.env`, run `ma
 - API: FastAPI, Pydantic v2, SQLAlchemy 2.0 async, Alembic (Python 3.14, uv). The API also serves the viewer and the MCP endpoint (FastMCP).
 - Worker: a separate process from the same project (`python -m app.entrypoints.worker`) — polls Gmail, dispatches classified replies, drains send jobs.
 - Sender (optional): a Go 1.26 service (`apps/sender-go`, pgx) that claims send jobs and hands them to the API.
+- Metrics: Prometheus client in the API (`/metrics`) and the worker (`WORKER_METRICS_PORT`); the Go sender logs JSON.
 - Database: Postgres 17 locally, Neon in production.
 - Deploy: fly.io; CI on GitHub Actions.
 
@@ -140,7 +153,7 @@ docs/            plan (one page per step), architecture notes, ADRs
 5. ~~[Step 4](docs/plan/step-4-hardening-and-demo.md) — hardening and demo: API keys, viewer, smoke tests, README v1~~
 6. ~~[Step 5](docs/plan/step-5-go-sender-extraction.md) — Go sender on the same job contract, switched by configuration~~
 7. ~~[Step 6](docs/plan/step-6-mcp-server.md) — MCP server over the API (OpenAPI-as-MCP)~~
-8. [Step 7](docs/plan/step-7-observability.md) — observability, README v2.
+8. ~~[Step 7](docs/plan/step-7-observability.md) — observability: Prometheus metrics, README v2, scale and trade-offs~~
 
 ## First-time setup
 
@@ -188,11 +201,12 @@ Use a **separate** lead mailbox you control; the worker ignores mail sent by the
 
 ## API
 
-Every route except `/health`, `/version`, `/viewer/` and the MCP tool list needs a workspace: `Authorization: Bearer <api-key>`, or `X-Workspace-Id: <uuid>` outside production.
+Every route except `/health`, `/version`, `/metrics`, `/viewer/` and the MCP tool list needs a workspace: `Authorization: Bearer <api-key>`, or `X-Workspace-Id: <uuid>` outside production.
 
 | Route | What it does |
 |---|---|
 | `GET /health`, `GET /version` | liveness; version, git SHA, environment |
+| `GET /metrics` | Prometheus metrics — public, counters and route templates only |
 | `GET /viewer/` | the read-only state viewer |
 | `GET /workspaces/me` | the caller's workspace |
 | `POST /campaigns` | create a campaign with steps (uses the workspace's mailbox) |

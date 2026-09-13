@@ -145,7 +145,8 @@ async def test_matched_reply_emits_three_events_in_order(
 
     processed = await _handler(session, receiver, classifier).run_once(mailbox)
 
-    assert processed == 1
+    assert processed.processed == 1
+    assert processed.classified == (Intent.POSITIVE,)
     inbound_row = (await session.execute(select(InboundMessageRow))).scalars().one()
     assert inbound_row.matched_outbound_id == outbound.id
     assert inbound_row.intent == "positive"
@@ -208,7 +209,8 @@ async def test_unmatched_reply_emits_only_inbound_received(
 
     processed = await _handler(session, receiver, classifier).run_once(mailbox)
 
-    assert processed == 1
+    assert processed.processed == 1
+    assert processed.classified == ()
     inbound_row = (await session.execute(select(InboundMessageRow))).scalars().one()
     assert inbound_row.matched_outbound_id is None
     assert inbound_row.intent is None
@@ -226,7 +228,7 @@ async def test_dedupe_on_second_run(
 
     processed = await _handler(session, receiver, classifier).run_once(mailbox)
 
-    assert processed == 1
+    assert processed.processed == 1
     stored = (
         (await session.execute(select(InboundMessageRow.provider_message_id)))
         .scalars()
@@ -241,7 +243,7 @@ async def test_dedupe_on_second_run(
     receiver2 = _FakeReceiver(FetchResult(new_cursor="7001", messages=(keep,)))
     processed_again = await _handler(session, receiver2, classifier).run_once(refreshed)
 
-    assert processed_again == 0
+    assert processed_again.processed == 0
     stored_again = (
         (await session.execute(select(InboundMessageRow.provider_message_id)))
         .scalars()

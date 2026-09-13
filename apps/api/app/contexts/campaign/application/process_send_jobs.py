@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
@@ -32,6 +33,12 @@ class SendJobOutcome(StrEnum):
 
 class SendJobNotClaimedError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class ProcessedSendJob:
+    job: ClaimedSendJob
+    outcome: SendJobOutcome
 
 
 class ClaimDueSendJobsHandler:
@@ -119,8 +126,10 @@ class ProcessSendJobByIdHandler:
 
     async def execute(
         self, *, job_id: UUID, workspace_id: UUID, moment: datetime
-    ) -> SendJobOutcome:
+    ) -> ProcessedSendJob:
         job = await self._jobs.get_claimed(job_id, workspace_id)
         if job is None:
             raise SendJobNotClaimedError
-        return await self._process.execute(job, moment)
+        return ProcessedSendJob(
+            job=job, outcome=await self._process.execute(job, moment)
+        )

@@ -22,7 +22,7 @@ Anything that does not strengthen that path goes to the [parking lot](#parking-l
 | 4 | [Hardening and demo](step-4-hardening-and-demo.md) | live demo works, README v1 ready | code merged — [PR #6](https://github.com/selivanov-tech/outboxlab/pull/6); demo video and live run pending |
 | 5 | [Go sender extraction](step-5-go-sender-extraction.md) | sender implementation can be switched without touching campaign / reply domain logic | code merged — [PR #7](https://github.com/selivanov-tech/outboxlab/pull/7); live switch with real email pending |
 | 6 | [MCP server](step-6-mcp-server.md) | the API is usable from Claude Desktop / Claude Code through MCP | code merged — [PR #8](https://github.com/selivanov-tech/outboxlab/pull/8); recorded demo pending |
-| 7 | [Observability and README v2](step-7-observability.md) | metrics endpoint, README v2, architecture write-up | planned |
+| 7 | [Observability and README v2](step-7-observability.md) | metrics endpoint, README v2, architecture write-up | code merged — [PR #9](https://github.com/selivanov-tech/outboxlab/pull/9); dashboards optional |
 
 Each step ships as one pull request titled `Step N: …`. The PR description links back to the step page, so the page is the place to read what the step was for.
 

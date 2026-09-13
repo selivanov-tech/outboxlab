@@ -5,7 +5,7 @@ Public, technical documentation for the OutboxLab sprint. Everything here descri
 | Folder | What is in it |
 |---|---|
 | [`plan/`](plan/README.md) | The 7-step build plan: one page per step with goal, checklist, decisions and status. Each "Step N" pull request links to its page. |
-| [`architecture/`](architecture/overview.md) | Bounded contexts, hexagonal communication, event contracts, and the infrastructure choices (Neon, Postgres-only queues, fly.io). |
+| [`architecture/`](architecture/overview.md) | Bounded contexts, hexagonal communication, event contracts, the infrastructure choices (Neon, Postgres-only queues, fly.io), and [scale and trade-offs](architecture/scale-and-tradeoffs.md). |
 | [`adr/`](adr/README.md) | Architecture decision records: the decisions that shape the code and why they were taken. |
 | [`mcp.md`](mcp.md) | Using the API from MCP clients (Claude Code, Claude Desktop): endpoint, auth, tools, example configs. |
 
