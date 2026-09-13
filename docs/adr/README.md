@@ -19,3 +19,5 @@ Short records of the decisions that shape this codebase. Format: context → dec
 | [0013](0013-outbox-consumer-processed-events.md) | Outbox consumer: dispatcher in the worker with a processed-events set; event versions in the payload |
 | [0014](0014-send-job-queue-contract.md) | Send-job queue contract: claim with `SKIP LOCKED` and a lease, at-least-once sending, frozen job payload |
 | [0015](0015-sending-guards-in-messaging.md) | Sending guards in the messaging send path: suppression, advisory lock per mailbox, daily cap per UTC day |
+| [0016](0016-viewer-served-by-the-api.md) | The read-only state viewer is a static page served by the API; the web placeholder and `WEB_DOMAIN` are removed |
+| [0017](0017-workspace-api-keys.md) | Minimal workspace API keys: Bearer key resolves the workspace; the workspace header is rejected in production |

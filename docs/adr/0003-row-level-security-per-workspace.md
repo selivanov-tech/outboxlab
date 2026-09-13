@@ -1,6 +1,6 @@
 # ADR 0003 — Tenant isolation with row-level security
 
-**Status:** accepted (Step 1)
+**Status:** accepted (Step 1); since Step 4 the API resolves the workspace from an API key and rejects the header in production ([ADR 0017](0017-workspace-api-keys.md))
 
 ## Context
 
