@@ -4,8 +4,16 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.contexts.campaign.application.ports.lead_repository import LeadStats
 from app.contexts.campaign.domain.lead import Lead, LeadState, StopReason
 from app.contexts.campaign.infrastructure.db.models import Lead as LeadRow
+
+
+_IN_PROGRESS_STATES = [
+    LeadState.PENDING.value,
+    LeadState.SCHEDULED.value,
+    LeadState.SENT.value,
+]
 
 
 class LeadRepository:
@@ -75,6 +83,40 @@ class LeadRepository:
         for campaign_id, state, count in (await self._session.execute(stmt)).all():
             counts.setdefault(campaign_id, {})[LeadState(state)] = int(count)
         return counts
+
+    async def stats(self, campaign_id: UUID) -> LeadStats:
+        in_campaign = LeadRow.campaign_id == campaign_id
+        totals = (
+            await self._session.execute(
+                select(
+                    func.count(),
+                    func.count().filter(LeadRow.steps_sent > 0),
+                    func.coalesce(func.sum(LeadRow.steps_sent), 0),
+                    func.count().filter(
+                        LeadRow.stop_reason == StopReason.BOUNCED.value
+                    ),
+                    func.count().filter(LeadRow.state.in_(_IN_PROGRESS_STATES)),
+                    func.count().filter(LeadRow.state == LeadState.DONE.value),
+                ).where(in_campaign)
+            )
+        ).one()
+        intents = (
+            await self._session.execute(
+                select(LeadRow.reply_intent, func.count())
+                .where(in_campaign, LeadRow.reply_intent.is_not(None))
+                .group_by(LeadRow.reply_intent)
+            )
+        ).all()
+        leads, contacted, emails_sent, bounced, in_progress, completed = totals
+        return LeadStats(
+            leads=int(leads),
+            contacted=int(contacted),
+            emails_sent=int(emails_sent),
+            bounced=int(bounced),
+            in_progress=int(in_progress),
+            completed=int(completed),
+            reply_intents={str(intent): int(count) for intent, count in intents},
+        )
 
 
 def _to_row(lead: Lead) -> LeadRow:

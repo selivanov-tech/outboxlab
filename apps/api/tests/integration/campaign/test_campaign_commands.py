@@ -14,6 +14,7 @@ from app.contexts.campaign.application.commands.start_campaign import (
     StartCampaignHandler,
 )
 from app.contexts.campaign.application.errors import (
+    CampaignHasNoLeadsError,
     CampaignNotFoundError,
     MailboxNotConnectedError,
 )
@@ -127,12 +128,27 @@ async def test_leads_added_to_an_active_campaign_are_scheduled_at_once(
 ) -> None:
     tenant = await seed_tenant(session)
     campaign = await _create(session).execute(COMMAND, tenant.workspace_id)
+    await _add_leads(session).execute(campaign.id, ["first@example.com"], now())
     await _start(session).execute(campaign.id, now())
 
     added = await _add_leads(session).execute(campaign.id, ["late@example.com"], now())
 
     assert (added.added, added.scheduled) == (1, 1)
-    assert await _job_count(session, tenant) == 1
+    assert await _job_count(session, tenant) == 2
+
+
+async def test_starting_a_campaign_without_leads_is_rejected(
+    session: AsyncSession,
+) -> None:
+    tenant = await seed_tenant(session)
+    campaign = await _create(session).execute(COMMAND, tenant.workspace_id)
+
+    with pytest.raises(CampaignHasNoLeadsError):
+        await _start(session).execute(campaign.id, now())
+
+    stored = await CampaignRepository(session).get(campaign.id)
+    assert stored is not None
+    assert stored.status is CampaignStatus.DRAFT
 
 
 async def test_unknown_campaign_is_reported(session: AsyncSession) -> None:
