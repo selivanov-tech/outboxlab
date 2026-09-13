@@ -69,7 +69,6 @@ Covered in CI by `tests/integration/campaign/test_reply_pauses_lead_end_to_end.p
 - A delivery failure that cannot be matched to an outbound message is stored but suppresses nothing.
 - Bounce detection is tested on fixtures shaped like Gmail notifications, not on a live bounce.
 - Follow-ups are new messages, not replies in the same Gmail thread; replies to either step still match by `Message-ID`.
-- An error from the Gmail adapter that is not an HTTP error leaves the job `running` until its lease expires, then it is retried.
 - The worker serves one workspace (`MAILBOX_WORKSPACE_ID`); the local runtime role is a superuser, which is why the queue and the consumer filter by workspace explicitly.
 - `POST /send-test-email` is still not idempotent.
 

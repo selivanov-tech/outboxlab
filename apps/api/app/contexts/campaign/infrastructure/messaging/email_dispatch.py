@@ -1,7 +1,6 @@
 from datetime import timedelta
 from uuid import UUID
 
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contexts.campaign.application.ports.email_dispatch import (
@@ -69,7 +68,7 @@ class MessagingEmailDispatch:
             )
         except MailboxNotConfiguredError:
             return DispatchFailed(error="mailbox not configured")
-        except httpx.HTTPError as exc:
+        except Exception as exc:
             return DispatchFailed(error=f"{exc.__class__.__name__}: {exc}")
         return DispatchSent(
             outbound_message_id=outbound.id, sent_at=outbound.created_at
