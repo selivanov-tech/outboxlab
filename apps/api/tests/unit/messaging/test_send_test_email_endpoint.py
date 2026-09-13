@@ -6,22 +6,22 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.entrypoints.api import app
-from app.contexts.messaging.application.commands.send_test_email import (
+from app.contexts.messaging.application.commands.send_email import (
     MailboxNotConfiguredError,
-    SendTestEmailCommand,
+    SendEmailCommand,
 )
 from app.contexts.messaging.domain.outbound_message import OutboundMessage
-from app.contexts.messaging.presentation.routes.messaging import send_test_email_handler
+from app.contexts.messaging.presentation.routes.messaging import send_email_handler
 
 
 class _StubHandler:
     def __init__(self) -> None:
         self.returns: OutboundMessage | None = None
         self.raises: type[Exception] | None = None
-        self.called_with: tuple[SendTestEmailCommand, UUID] | None = None
+        self.called_with: tuple[SendEmailCommand, UUID] | None = None
 
     async def execute(
-        self, command: SendTestEmailCommand, workspace_id: UUID
+        self, command: SendEmailCommand, workspace_id: UUID
     ) -> OutboundMessage:
         self.called_with = (command, workspace_id)
         if self.raises is not None:
@@ -33,11 +33,11 @@ class _StubHandler:
 @pytest.fixture
 def stub_handler() -> Iterator[_StubHandler]:
     stub = _StubHandler()
-    app.dependency_overrides[send_test_email_handler] = lambda: stub
+    app.dependency_overrides[send_email_handler] = lambda: stub
     try:
         yield stub
     finally:
-        app.dependency_overrides.pop(send_test_email_handler, None)
+        app.dependency_overrides.pop(send_email_handler, None)
 
 
 def _body() -> dict[str, str]:

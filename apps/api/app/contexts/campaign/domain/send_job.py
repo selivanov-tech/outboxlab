@@ -10,6 +10,7 @@ from app.shared.util.clock import now
 
 MAX_SEND_ATTEMPTS = 3
 RETRY_BACKOFF = timedelta(seconds=60)
+CLAIM_LEASE = timedelta(minutes=5)
 
 
 class SendJobStatus(StrEnum):

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "outboxlab/jobs/send_job/v1",
+  "title": "SendJob",
+  "description": "Payload of a row in campaign__send_jobs. Shared by every sender implementation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job_version",
+    "campaign_id",
+    "lead_id",
+    "step_id",
+    "step_position",
+    "to_email",
+    "subject",
+    "body"
+  ],
+  "properties": {
+    "job_version": { "const": 1 },
+    "campaign_id": { "type": "string", "format": "uuid" },
+    "lead_id": { "type": "string", "format": "uuid" },
+    "step_id": { "type": "string", "format": "uuid" },
+    "step_position": { "type": "integer", "minimum": 1 },
+    "to_email": { "type": "string" },
+    "subject": { "type": "string" },
+    "body": { "type": "string" }
+  }
+}

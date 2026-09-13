@@ -39,6 +39,7 @@ services:
       APP_ENV: local
     volumes:
       - ../../apps/api:/app
+      - ../../contracts:/contracts:ro
       # /opt/venv is baked into the image (see infra/dev/api/Dockerfile); no
       # volume mount is needed. Rebuild the image (`make rebuild`) when deps
       # change in pyproject.toml or uv.lock.

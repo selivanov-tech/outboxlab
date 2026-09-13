@@ -15,13 +15,13 @@ class MailboxNotConfiguredError(Exception):
 
 
 @dataclass(frozen=True)
-class SendTestEmailCommand:
+class SendEmailCommand:
     to_email: str
     subject: str
     body: str
 
 
-class SendTestEmailHandler:
+class SendEmailHandler:
     def __init__(
         self,
         mailbox_gateway: MailboxGatewayPort,
@@ -33,7 +33,7 @@ class SendTestEmailHandler:
         self._sender = sender
 
     async def execute(
-        self, command: SendTestEmailCommand, workspace_id: UUID
+        self, command: SendEmailCommand, workspace_id: UUID
     ) -> OutboundMessage:
         mailbox = await self._mailbox_gateway.get_by_workspace(workspace_id)
         if mailbox is None:

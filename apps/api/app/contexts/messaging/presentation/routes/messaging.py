@@ -11,10 +11,10 @@ from app.config import get_settings
 from app.contexts.mailbox.infrastructure.persistence.mailbox_repo import (
     MailboxRepository,
 )
-from app.contexts.messaging.application.commands.send_test_email import (
+from app.contexts.messaging.application.commands.send_email import (
     MailboxNotConfiguredError,
-    SendTestEmailCommand,
-    SendTestEmailHandler,
+    SendEmailCommand,
+    SendEmailHandler,
 )
 from app.contexts.messaging.domain.outbound_message import OutboundMessage
 from app.contexts.messaging.infrastructure.gmail.access_token import (
@@ -37,9 +37,9 @@ class SendTestEmailRequest(BaseModel):
     body: str
 
 
-async def send_test_email_handler(
+async def send_email_handler(
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> AsyncIterator[SendTestEmailHandler]:
+) -> AsyncIterator[SendEmailHandler]:
     settings = get_settings()
     async with httpx.AsyncClient() as client:
         token_provider = GoogleAccessTokenProvider(
@@ -49,7 +49,7 @@ async def send_test_email_handler(
             refresh_token=settings.google_refresh_token,
         )
         sender = GmailApiSender(client, token_provider)
-        yield SendTestEmailHandler(
+        yield SendEmailHandler(
             MailboxGateway(MailboxRepository(session)),
             OutboundMessageRepository(session),
             sender,
@@ -60,9 +60,9 @@ async def send_test_email_handler(
 async def send_test_email(
     request: SendTestEmailRequest,
     workspace_id: Annotated[UUID, Depends(require_workspace)],
-    handler: Annotated[SendTestEmailHandler, Depends(send_test_email_handler)],
+    handler: Annotated[SendEmailHandler, Depends(send_email_handler)],
 ) -> OutboundMessage:
-    command = SendTestEmailCommand(
+    command = SendEmailCommand(
         to_email=request.to_email,
         subject=request.subject,
         body=request.body,
