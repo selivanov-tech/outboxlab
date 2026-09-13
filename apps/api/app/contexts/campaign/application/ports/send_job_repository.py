@@ -31,6 +31,10 @@ class SendJobRepositoryPort(Protocol):
         lease: timedelta,
     ) -> list[ClaimedSendJob]: ...
 
+    async def get_claimed(
+        self, job_id: UUID, workspace_id: UUID
+    ) -> ClaimedSendJob | None: ...
+
     async def complete(
         self, job_id: UUID, outbound_message_id: UUID, moment: datetime
     ) -> None: ...
