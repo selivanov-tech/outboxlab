@@ -1,4 +1,4 @@
-"""Step 3: campaign steps, leads and the send-job queue.
+"""Step 3: campaign steps, leads, the send-job queue and sending guards.
 
 Revision ID: 0004
 Revises: 0003
@@ -20,6 +20,7 @@ _NEW_TENANT_TABLES = (
     "campaign__steps",
     "campaign__leads",
     "campaign__send_jobs",
+    "messaging__suppressions",
 )
 
 
@@ -147,18 +148,55 @@ def upgrade() -> None:
     )
     op.create_index("ix_send_jobs_lead_id", "campaign__send_jobs", ["lead_id"])
 
+    op.add_column(
+        "mailbox__mailboxes",
+        sa.Column(
+            "daily_send_cap",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("20"),
+        ),
+    )
+    op.create_index(
+        "ix_outbound_messages_mailbox_created_at",
+        "messaging__outbound_messages",
+        ["mailbox_id", "created_at"],
+    )
+    op.create_table(
+        "messaging__suppressions",
+        sa.Column("id", UUID(as_uuid=True), primary_key=True),
+        _workspace_fk(),
+        sa.Column("email", sa.String(320), nullable=False),
+        sa.Column("reason", sa.String(32), nullable=False),
+        sa.Column(
+            "source_inbound_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("messaging__inbound_messages.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint(
+            "workspace_id",
+            "email",
+            "reason",
+            name="uq_suppressions_workspace_email_reason",
+        ),
+    )
+
     for table in _NEW_TENANT_TABLES:
         _enable_rls(table)
 
 
 def downgrade() -> None:
+    op.drop_table("messaging__suppressions")
+    op.drop_index(
+        "ix_outbound_messages_mailbox_created_at",
+        table_name="messaging__outbound_messages",
+    )
+    op.drop_column("mailbox__mailboxes", "daily_send_cap")
     op.drop_table("campaign__send_jobs")
     op.drop_table("campaign__leads")
     op.drop_table("campaign__steps")
-    op.alter_column(
-        "campaign__campaigns", "created_at", server_default=sa.func.now()
-    )
-    op.alter_column(
-        "campaign__campaigns", "status", server_default=sa.text("'draft'")
-    )
+    op.alter_column("campaign__campaigns", "created_at", server_default=sa.func.now())
+    op.alter_column("campaign__campaigns", "status", server_default=sa.text("'draft'"))
     op.drop_column("campaign__campaigns", "mailbox_id")

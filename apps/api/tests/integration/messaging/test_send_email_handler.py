@@ -20,8 +20,14 @@ from app.contexts.messaging.infrastructure.db.models import (
     OutboundMessage as OutboundMessageRow,
 )
 from app.contexts.messaging.infrastructure.mailbox.gateway import MailboxGateway
+from app.contexts.messaging.infrastructure.persistence.mailbox_send_lock import (
+    PostgresMailboxSendLock,
+)
 from app.contexts.messaging.infrastructure.persistence.outbound_repo import (
     OutboundMessageRepository,
+)
+from app.contexts.messaging.infrastructure.persistence.suppression_repo import (
+    SuppressionRepository,
 )
 
 
@@ -55,6 +61,8 @@ async def test_persists_outbound_and_marks_sent(session: AsyncSession) -> None:
     handler = SendEmailHandler(
         MailboxGateway(MailboxRepository(session)),
         OutboundMessageRepository(session),
+        SuppressionRepository(session),
+        PostgresMailboxSendLock(session),
         sender,
     )
 
@@ -88,6 +96,8 @@ async def test_raises_when_mailbox_not_configured(session: AsyncSession) -> None
     handler = SendEmailHandler(
         MailboxGateway(MailboxRepository(session)),
         OutboundMessageRepository(session),
+        SuppressionRepository(session),
+        PostgresMailboxSendLock(session),
         _FakeSender(),
     )
 

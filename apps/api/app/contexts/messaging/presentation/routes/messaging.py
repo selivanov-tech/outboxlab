@@ -12,7 +12,10 @@ from app.contexts.mailbox.infrastructure.persistence.mailbox_repo import (
     MailboxRepository,
 )
 from app.contexts.messaging.application.commands.send_email import (
+    DailySendCapReachedError,
+    MailboxBusyError,
     MailboxNotConfiguredError,
+    RecipientSuppressedError,
     SendEmailCommand,
     SendEmailHandler,
 )
@@ -22,8 +25,14 @@ from app.contexts.messaging.infrastructure.gmail.access_token import (
 )
 from app.contexts.messaging.infrastructure.gmail.sender import GmailApiSender
 from app.contexts.messaging.infrastructure.mailbox.gateway import MailboxGateway
+from app.contexts.messaging.infrastructure.persistence.mailbox_send_lock import (
+    PostgresMailboxSendLock,
+)
 from app.contexts.messaging.infrastructure.persistence.outbound_repo import (
     OutboundMessageRepository,
+)
+from app.contexts.messaging.infrastructure.persistence.suppression_repo import (
+    SuppressionRepository,
 )
 from app.shared.infrastructure.db.session import get_session
 from app.shared.presentation.dependencies import require_workspace
@@ -52,6 +61,8 @@ async def send_email_handler(
         yield SendEmailHandler(
             MailboxGateway(MailboxRepository(session)),
             OutboundMessageRepository(session),
+            SuppressionRepository(session),
+            PostgresMailboxSendLock(session),
             sender,
         )
 
@@ -71,3 +82,9 @@ async def send_test_email(
         return await handler.execute(command, workspace_id)
     except MailboxNotConfiguredError:
         raise HTTPException(status_code=409, detail="No mailbox configured")
+    except RecipientSuppressedError:
+        raise HTTPException(status_code=409, detail="Recipient is suppressed")
+    except MailboxBusyError:
+        raise HTTPException(status_code=429, detail="Mailbox is busy, retry shortly")
+    except DailySendCapReachedError as exc:
+        raise HTTPException(status_code=429, detail=str(exc))

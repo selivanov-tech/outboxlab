@@ -1,6 +1,7 @@
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contexts.messaging.domain.outbound_message import OutboundMessage
@@ -46,6 +47,18 @@ class OutboundMessageRepository:
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         return [_to_domain(r) for r in rows]
+
+    async def count_sent_since(self, mailbox_id: UUID, since: datetime) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(OutboundMessageRow)
+            .where(
+                OutboundMessageRow.mailbox_id == mailbox_id,
+                OutboundMessageRow.provider_message_id.is_not(None),
+                OutboundMessageRow.created_at >= since,
+            )
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
 
 
 def _to_domain(row: OutboundMessageRow) -> OutboundMessage:

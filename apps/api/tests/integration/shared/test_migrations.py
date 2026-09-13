@@ -11,6 +11,7 @@ _EXPECTED_TABLES = {
     "messaging__outbound_messages",
     "messaging__inbound_messages",
     "messaging__outbox_events",
+    "messaging__suppressions",
 }
 
 _RLS_FORCED_TABLES = {
@@ -22,6 +23,7 @@ _RLS_FORCED_TABLES = {
     "messaging__outbound_messages",
     "messaging__inbound_messages",
     "messaging__outbox_events",
+    "messaging__suppressions",
 }
 
 

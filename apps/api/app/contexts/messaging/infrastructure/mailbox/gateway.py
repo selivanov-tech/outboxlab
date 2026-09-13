@@ -28,4 +28,5 @@ def _to_view(mailbox: Mailbox) -> MailboxView:
         workspace_id=mailbox.workspace_id,
         email_address=mailbox.email_address,
         last_sync_cursor=mailbox.last_sync_cursor,
+        daily_send_cap=mailbox.daily_send_cap,
     )

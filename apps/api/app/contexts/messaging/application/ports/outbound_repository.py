@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -10,3 +11,5 @@ class OutboundMessageRepositoryPort(Protocol):
     async def mark_sent(self, message: OutboundMessage) -> None: ...
 
     async def list_unanswered(self, mailbox_id: UUID) -> list[OutboundMessage]: ...
+
+    async def count_sent_since(self, mailbox_id: UUID, since: datetime) -> int: ...

@@ -9,6 +9,7 @@ class MailboxView:
     workspace_id: UUID
     email_address: str
     last_sync_cursor: str | None
+    daily_send_cap: int
 
 
 class MailboxGatewayPort(Protocol):

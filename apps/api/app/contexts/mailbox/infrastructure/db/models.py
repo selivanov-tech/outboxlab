@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,9 @@ class Mailbox(Base):
     )
     email_address: Mapped[str] = mapped_column(String(320), nullable=False)
     last_sync_cursor: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    daily_send_cap: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("20")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
