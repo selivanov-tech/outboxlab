@@ -528,7 +528,7 @@ code {
   gap: 2rem;
 }
 
-@media (max-width: 60rem) {
+@media (max-width: 72rem) {
   .campaign-columns {
     grid-template-columns: minmax(0, 1fr);
   }
