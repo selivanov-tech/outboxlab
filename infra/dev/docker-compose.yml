@@ -98,11 +98,29 @@ services:
       api:
         condition: service_healthy
 
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/dev/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      OUTBOXLAB_API_URL: http://api:8000
+    volumes:
+      # Only the source is mounted; node_modules and config live in the image
+      # (see infra/dev/web/Dockerfile).
+      - ../../apps/web/src:/app/src
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - "3000"
+
   proxy:
     image: caddy:2.9-alpine
     restart: unless-stopped
     environment:
       API_DOMAIN: ${API_DOMAIN:?API_DOMAIN must be set in .env}
+      WEB_DOMAIN: ${WEB_DOMAIN:?WEB_DOMAIN must be set in .env}
     volumes:
       - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./proxy/certs:/certs:ro
@@ -112,6 +130,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      web:
+        condition: service_started
 
 volumes:
   pgdata:

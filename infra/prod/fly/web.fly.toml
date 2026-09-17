@@ -1,0 +1,20 @@
+# fly.io config for apps/web (the operator console).
+# Deploy: make deploy-web
+#
+# Required fly secret (fly secrets set ... -a outboxlab-web):
+#   OUTBOXLAB_API_URL — the public https origin of the api app. It is a secret only because
+#   hostnames stay out of tracked files; the value itself is not sensitive.
+
+app = "outboxlab-web"
+primary_region = "iad"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -28,6 +28,14 @@ deploy-worker:  ## Deploy worker to fly.io (shares the api image)
 		--build-arg GIT_SHA=$$(git rev-parse --short HEAD) \
 		$(FLY_DEPLOY_FLAGS)
 
+.PHONY: deploy-web
+deploy-web:  ## Deploy the web console to fly.io
+	@command -v $(FLY) >/dev/null 2>&1 || { echo "$(FLY) not found. Install: brew install flyctl"; exit 1; }
+	$(FLY) deploy \
+		-c infra/prod/fly/web.fly.toml \
+		--dockerfile infra/prod/web/Dockerfile \
+		$(FLY_DEPLOY_FLAGS)
+
 # ---- Guards ----
 
 .PHONY: check-leaks

@@ -4,15 +4,17 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infra/dev/docker-compose.yml --env-file .env
 CERT_DIR := infra/dev/proxy/certs
 
-# The domain and demo settings are read from .env (gitignored). Never hardcode them here.
+# Domains and demo settings are read from .env (gitignored). Never hardcode them here.
 # tr -d '\r' strips CRLF if .env was edited on Windows; $(strip) trims whitespace.
 API_DOMAIN := $(strip $(shell test -f .env && grep -E '^API_DOMAIN=' .env | head -1 | cut -d= -f2- | tr -d '\r'))
+WEB_DOMAIN := $(strip $(shell test -f .env && grep -E '^WEB_DOMAIN=' .env | head -1 | cut -d= -f2- | tr -d '\r'))
 ENV_APP_ENV := $(strip $(shell test -f .env && grep -E '^APP_ENV=' .env | head -1 | cut -d= -f2- | tr -d '\r'))
 ENV_WORKSPACE_ID := $(strip $(shell test -f .env && grep -E '^MAILBOX_WORKSPACE_ID=' .env | head -1 | cut -d= -f2- | tr -d '\r'))
-LOCAL_DOMAINS := $(API_DOMAIN)
+LOCAL_DOMAINS := $(strip $(API_DOMAIN) $(WEB_DOMAIN))
 
 define require_domains
 @test -n "$(API_DOMAIN)" || { echo "API_DOMAIN not set in .env (run: make env, then edit .env)"; exit 1; }
+@test -n "$(WEB_DOMAIN)" || { echo "WEB_DOMAIN not set in .env (run: make env, then edit .env)"; exit 1; }
 endef
 
 # CI-facing targets (deploy, check-leaks) live in their own fragment so CI can
@@ -29,7 +31,7 @@ help:  ## Show available targets
 setup: env  ## First-time bootstrap: create .env, then print next steps
 	@echo ""
 	@echo "Next steps (run in order, after editing .env):"
-	@echo "  1. Edit .env       — set API_DOMAIN, GOOGLE_* secrets"
+	@echo "  1. Edit .env       — set API_DOMAIN, WEB_DOMAIN, GOOGLE_* secrets"
 	@echo "  2. make certs      — generate local TLS certs (reads domains from .env)"
 	@echo "  3. make hosts-add  — point local domains at 127.0.0.1 (uses sudo)"
 	@echo "  4. make up         — start containers"
@@ -72,7 +74,7 @@ up:  ## Start all containers
 	$(COMPOSE) up -d
 	@echo ""
 	@echo "API:    https://$(API_DOMAIN)"
-	@echo "Viewer: https://$(API_DOMAIN)/viewer/"
+	@echo "Web:    https://$(WEB_DOMAIN)"
 	@echo "Logs:   make logs"
 
 .PHONY: down
@@ -180,6 +182,19 @@ lint:  ## Check formatting + lint with ruff, read-only (matches CI)
 format:  ## Auto-format + autofix with ruff (writes changes)
 	$(COMPOSE) exec api uv run ruff format app tests
 	$(COMPOSE) exec api uv run ruff check --fix app tests
+
+.PHONY: openapi
+openapi:  ## Export the API contract and regenerate the web client types
+	$(COMPOSE) exec -T api python -m app.entrypoints.export_openapi > contracts/openapi/api-v1.json
+	cd apps/web && pnpm api:generate
+
+.PHONY: web-ready
+web-ready:  ## Web gate on the host (needs pnpm): contract types, eslint, prettier, tsc, vitest, build
+	cd apps/web && pnpm install --frozen-lockfile && pnpm api:check && pnpm lint && pnpm format:check && pnpm type-check && pnpm test && pnpm build
+
+.PHONY: shell-web
+shell-web:  ## Open shell in web container
+	$(COMPOSE) exec web /bin/sh
 
 .PHONY: ready
 ready: check-leaks lint typecheck test  ## Pre-commit gate: leaks + ruff + pyright + tests
