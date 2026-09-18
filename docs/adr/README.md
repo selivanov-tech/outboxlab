@@ -24,3 +24,4 @@ Short records of the decisions that shape this codebase. Format: context → dec
 | [0018](0018-go-sender-claims-and-hands-off.md) | Go sender claims send jobs with the shared statement and hands each job to an internal API route |
 | [0019](0019-openapi-as-mcp.md) | The API is exposed to MCP clients by generating tools from tagged OpenAPI routes; the caller's API key is forwarded on every call |
 | [0020](0020-prometheus-metrics.md) | Prometheus metrics recorded at the composition roots from handler results; public `/metrics` with bounded labels |
+| [0021](0021-nextjs-web-console.md) | The web console is a Next.js backend-for-frontend: Server Components and Actions call the API, the key lives in an HttpOnly cookie, types come from the exported OpenAPI contract |

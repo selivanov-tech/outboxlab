@@ -1,7 +1,9 @@
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +26,24 @@ from app.shared.presentation.dependencies import require_workspace
 router = APIRouter()
 
 
+class RecentEventResponse(BaseModel):
+    event_type: str
+    aggregate_id: UUID
+    created_at: datetime
+
+
+class WorkspaceStateResponse(BaseModel):
+    db: str
+    workspace_id: UUID
+    mailbox_last_sync_cursor: str | None
+    outbound_count: int
+    inbound_count: int
+    intents: dict[str, int]
+    leads: dict[str, int]
+    send_jobs: dict[str, int]
+    recent_events: list[RecentEventResponse]
+
+
 async def _count(session: AsyncSession, stmt) -> int:
     return int((await session.execute(stmt)).scalar_one())
 
@@ -32,11 +52,16 @@ async def _grouped(session: AsyncSession, stmt) -> dict[str, int]:
     return {key: int(count) for key, count in (await session.execute(stmt)).all()}
 
 
-@router.get("/debug/state")
+@router.get(
+    "/debug/state",
+    response_model=WorkspaceStateResponse,
+    operation_id="get_workspace_state",
+    summary="Workspace counters, mailbox sync cursor and the latest outbox events",
+)
 async def state(
     workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> dict[str, object]:
+) -> WorkspaceStateResponse:
     try:
         outbound_count = await _count(
             session,
@@ -94,21 +119,19 @@ async def state(
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"db: {exc.__class__.__name__}")
 
-    return {
-        "db": "ok",
-        "workspace_id": str(workspace_id),
-        "mailbox_last_sync_cursor": last_sync_cursor,
-        "outbound_count": outbound_count,
-        "inbound_count": inbound_count,
-        "intents": intents,
-        "leads": leads,
-        "send_jobs": send_jobs,
-        "recent_events": [
-            {
-                "event_type": event_type,
-                "aggregate_id": str(aggregate_id),
-                "created_at": created_at.isoformat(),
-            }
+    return WorkspaceStateResponse(
+        db="ok",
+        workspace_id=workspace_id,
+        mailbox_last_sync_cursor=last_sync_cursor,
+        outbound_count=outbound_count,
+        inbound_count=inbound_count,
+        intents=intents,
+        leads=leads,
+        send_jobs=send_jobs,
+        recent_events=[
+            RecentEventResponse(
+                event_type=event_type, aggregate_id=aggregate_id, created_at=created_at
+            )
             for event_type, aggregate_id, created_at in event_rows
         ],
-    }
+    )

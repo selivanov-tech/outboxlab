@@ -2,7 +2,7 @@
 
 A small cold-email outreach engine built as a proof of work: a campaign sends a short sequence from a Gmail mailbox, a reply is matched and classified, and the lead is paused before the follow-up goes out. The code is a modular monolith with DDD bounded contexts and ports, on a **Postgres-only operational stack** — the job queue, locks, send caps, suppression list and outbox are tables and SQL, with no Redis and no broker. An LLM classifier sits behind a port with a deterministic fallback, so the demo never depends on a vendor.
 
-**Status: all seven steps are built (README v2).** Live runs with real Gmail credentials, the demo recordings and production deploys of the worker and the Go sender are manual; each [step page](docs/plan/README.md) lists what is left.
+**Status: all seven planned steps are built, plus a web console (Step 8).** Live runs with real Gmail credentials, the demo recordings and production deploys of the worker and the Go sender are manual; each [step page](docs/plan/README.md) lists what is left.
 
 ## Demo path
 
@@ -10,7 +10,7 @@ A small cold-email outreach engine built as a proof of work: a campaign sends a 
 2. Create a campaign with two steps (the follow-up after a delay), add a lead mailbox you control, start the campaign.
 3. The worker claims the step-1 job and sends it through the Gmail API, after the suppression check, the mailbox lock and the daily cap.
 4. The lead replies. The worker polls the inbox, matches the reply to the sent message, and classifies the intent.
-5. The campaign consumer pauses the lead and cancels the follow-up. The viewer at `/viewer/` shows `sent` turn into `paused` within one poll.
+5. The campaign consumer pauses the lead and cancels the follow-up. The web console shows the lead's route change: step 1 sent, the follow-up cancelled, a "Replied" stamp — within one poll, without a reload.
 
 ```mermaid
 sequenceDiagram
@@ -30,7 +30,7 @@ sequenceDiagram
     Worker->>Gmail: poll inbox from the sync cursor
     Worker->>DB: match reply, classify intent, ReplyClassified event
     Worker->>DB: consume event: lead paused, step 2 job cancelled
-    Operator->>API: GET /viewer/ shows the lead paused
+    Operator->>API: the web console shows the lead paused
 ```
 
 Commands for a live run are in [Run the demo](#run-the-demo).
@@ -47,7 +47,7 @@ Commands for a live run are in [Run the demo](#run-the-demo).
 - **Access** — workspace API keys (`Authorization: Bearer olab_…`). In production a key is the only way in; locally the `X-Workspace-Id` header also works.
 - **MCP** — the same API is an MCP server at `/mcp/`: an agent creates campaigns, adds leads, starts them and reads metrics with the workspace API key. See [MCP access](docs/mcp.md).
 - **Metrics** — `GET /metrics` on the API and a metrics port on the worker: emails sent, send failures by reason, classified replies by intent, paused leads, queue latency, HTTP requests by route template ([ADR 0020](docs/adr/0020-prometheus-metrics.md)).
-- **Viewer** — `/viewer/`: campaigns, leads with state, stop reason, reply intent and next send time, workspace counts and recent events, refreshed every 5 seconds.
+- **Web console** — a Next.js app (`apps/web`): connect a workspace with its API key, write a campaign, add leads, start sending, and watch every lead's route through the sequence, the mailbox's daily cap and the latest events. It is a backend-for-frontend: the browser never calls the API and never sees the key ([ADR 0021](docs/adr/0021-nextjs-web-console.md)). The older read-only page at `/viewer/` stays until the console is deployed.
 
 ## Architecture
 
@@ -122,7 +122,8 @@ Switch locally: set `SENDER_IMPL=go` and `INTERNAL_API_TOKEN` in `.env`, run `ma
 
 ## Stack
 
-- API: FastAPI, Pydantic v2, SQLAlchemy 2.0 async, Alembic (Python 3.14, uv). The API also serves the viewer and the MCP endpoint (FastMCP).
+- API: FastAPI, Pydantic v2, SQLAlchemy 2.0 async, Alembic (Python 3.14, uv). The API also serves the MCP endpoint (FastMCP) and the legacy `/viewer/` page.
+- Web: Next.js 16 (App Router, React 19, TypeScript, pnpm), Feature-Sliced Design, typed API client generated from `contracts/openapi/api-v1.json`.
 - Worker: a separate process from the same project (`python -m app.entrypoints.worker`) — polls Gmail, dispatches classified replies, drains send jobs.
 - Sender (optional): a Go 1.26 service (`apps/sender-go`, pgx) that claims send jobs and hands them to the API.
 - Metrics: Prometheus client in the API (`/metrics`) and the worker (`WORKER_METRICS_PORT`); the Go sender logs JSON.
@@ -134,11 +135,12 @@ Switch locally: set `SENDER_IMPL=go` and `INTERNAL_API_TOKEN` in `.env`, run `ma
 ```
 apps/api/        FastAPI app, worker entrypoint, Alembic migrations, tests
                  app/contexts/<bc> · app/shared · app/entrypoints (api, worker, seed, issue_api_key)
+apps/web/        Next.js operator console (shared → entities → features → app)
 apps/sender-go/  Go sender: claims send jobs, hands each one to the API
-contracts/       versioned JSON Schemas (events/, jobs/) and the shared claim statement
+contracts/       versioned JSON Schemas (events/, jobs/), the shared claim statement, the OpenAPI contract (openapi/)
 infra/
-  dev/           docker-compose, dev Dockerfile, Caddy proxy, demo_reset.sql
-  prod/          prod Dockerfile, fly.toml files
+  dev/           docker-compose, dev Dockerfiles, Caddy proxy, demo_reset.sql
+  prod/          prod Dockerfiles, fly.toml files
   make/          shared make fragment (deploy, check-leaks)
 scripts/         smoke.sh
 docs/            plan (one page per step), architecture notes, ADRs
@@ -154,19 +156,20 @@ docs/            plan (one page per step), architecture notes, ADRs
 6. ~~[Step 5](docs/plan/step-5-go-sender-extraction.md) — Go sender on the same job contract, switched by configuration~~
 7. ~~[Step 6](docs/plan/step-6-mcp-server.md) — MCP server over the API (OpenAPI-as-MCP)~~
 8. ~~[Step 7](docs/plan/step-7-observability.md) — observability: Prometheus metrics, README v2, scale and trade-offs~~
+9. ~~[Step 8](docs/plan/step-8-web-console.md) — web console: Next.js backend-for-frontend over the API~~
 
 ## First-time setup
 
-Prereqs: a Docker engine, `mkcert` (`brew install mkcert nss`), `make`.
+Prereqs: a Docker engine, `mkcert` (`brew install mkcert nss`), `make`. Work on `apps/web` outside the container also needs Node 24+ and `pnpm`.
 
 ```bash
 make env         # copy .env.example to .env
-# edit .env: set API_DOMAIN.
+# edit .env: set API_DOMAIN and WEB_DOMAIN.
 # For the live email loop also set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
 # GOOGLE_REFRESH_TOKEN, GMAIL_USER_EMAIL, MAILBOX_WORKSPACE_ID
 # (tests and the API run without them).
-make certs       # TLS certificate for your API domain
-make hosts-add   # /etc/hosts entry (sudo)
+make certs       # TLS certificate for both domains
+make hosts-add   # /etc/hosts entries (sudo)
 make up          # start containers
 make migrate     # apply Alembic migrations
 make seed        # default workspace + mailbox (idempotent; mailbox only if GMAIL_USER_EMAIL is set)
@@ -180,8 +183,8 @@ The Gmail refresh token needs the `gmail.send` and `gmail.readonly` scopes. In a
 Use a **separate** lead mailbox you control; the worker ignores mail sent by the polled mailbox itself.
 
 1. `make up`, `make migrate`, `make seed`. Wait until `GET /debug/state` shows a non-null `mailbox_last_sync_cursor`.
-2. Open `https://<api-domain>/viewer/` and connect with the workspace id (local) or an API key (`make api-key`).
-3. Either run `make smoke SMOKE_LEAD_EMAIL=<lead-address>`, which drives steps 4–6 and waits for you to reply, or use the API directly:
+2. Open `https://<web-domain>` and connect with an API key (`make api-key`) or, locally, the workspace id.
+3. In the console: **New campaign** → write two steps → **Add leads** → **Start sending**. Or run `make smoke SMOKE_LEAD_EMAIL=<lead-address>`, which drives steps 4–6 and waits for you to reply, or use the API directly:
 
    ```bash
    API=https://<api-domain>
@@ -193,9 +196,9 @@ Use a **separate** lead mailbox you control; the worker ignores mail sent by the
    curl -s -X POST "$API/campaigns/$CAMPAIGN/start" -H "$AUTH"
    ```
 
-4. The viewer shows the lead `sent` with a next send time.
+4. The campaign page shows step 1 sent and step 2 next, with its send time.
 5. Reply from the lead mailbox, for example "Yes, interested — let's talk".
-6. Within one poll (about 20 seconds) the lead turns `paused` with intent `positive`, and no send is scheduled.
+6. Within one poll (about 20 seconds) the lead turns `paused`, its route shows the follow-up cancelled and a "Replied · positive" stamp, and no send is scheduled.
 
 `make demo-reset` shows the campaign and message rows of the seeded workspace; `make demo-reset CONFIRM=yes` deletes them and keeps the workspace, the mailbox and its sync cursor.
 
@@ -232,8 +235,10 @@ make smoke-readonly     # read-only smoke test, sends no email
 make sender-go-test     # go vet + go test for the Go sender
 make sender-go-up       # start the Go sender (SENDER_IMPL=go)
 make api-key            # print a new workspace API key once
+make openapi            # export the API contract and regenerate the web client types
+make web-ready          # web gate on the host: contract types, eslint, prettier, tsc, vitest, build
 make ready              # leak check + ruff + pyright + tests
-make shell-api / shell-worker / shell-db
+make shell-api / shell-worker / shell-web / shell-db
 make clean              # stop and drop volumes
 ```
 
@@ -262,7 +267,7 @@ Tests `SET LOCAL ROLE outboxlab_app` so row-level security applies (it does not 
 
 ## CI
 
-Every pull request runs **api-tests** (Postgres 17 service, role bootstrap, migrations, seed, pytest, and the Go claim test against the migrated database), **typecheck** (pyright), **lint** (ruff format check + check), **sender-go** (gofmt, vet, test, build) and **leak-check** (no hostnames in tracked files). On a push to `main`, **deploy-api** ships the API to fly.io after all five pass, inside the `production` environment; it needs a `FLY_API_TOKEN` secret (`fly tokens create deploy -a outboxlab-api`).
+Every pull request runs **api-tests** (Postgres 17 service, role bootstrap, migrations, seed, pytest, and the Go claim test against the migrated database), **typecheck** (pyright), **lint** (ruff format check + check), **sender-go** (gofmt, vet, test, build), **web** (generated types match the contract, eslint, prettier, tsc, vitest, build) and **leak-check** (no hostnames in tracked files). On a push to `main`, **deploy-api** ships the API to fly.io after all six pass, inside the `production` environment; it needs a `FLY_API_TOKEN` secret (`fly tokens create deploy -a outboxlab-api`).
 
 ## Deploy (fly.io)
 
@@ -276,10 +281,11 @@ fly secrets set -a outboxlab-api DATABASE_URL="postgresql+asyncpg://<neon-url>" 
 # by hand, when needed
 make deploy          # API
 make deploy-worker   # worker; needs its own secrets, see infra/prod/fly/worker.fly.toml
+make deploy-web      # web console; needs OUTBOXLAB_API_URL, see infra/prod/fly/web.fly.toml
 ```
 
 The deployed API accepts only API keys. Issue one with `python -m app.entrypoints.issue_api_key`, run with `DATABASE_URL` and `MAILBOX_WORKSPACE_ID` set. Real sends from production also need the worker app deployed.
 
 ## Package managers
 
-Python: `uv` only. Go: modules (`go.mod`, `go.sum`).
+Python: `uv` only. Go: modules (`go.mod`, `go.sum`). Node: `pnpm` only (`apps/web/pnpm-lock.yaml`).

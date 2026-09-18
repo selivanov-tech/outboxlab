@@ -1,0 +1,1027 @@
+{
+  "components": {
+    "schemas": {
+      "AddLeadsRequest": {
+        "properties": {
+          "emails": {
+            "items": {
+              "format": "email",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Emails",
+            "type": "array"
+          }
+        },
+        "required": [
+          "emails"
+        ],
+        "title": "AddLeadsRequest",
+        "type": "object"
+      },
+      "AddLeadsResponse": {
+        "properties": {
+          "added": {
+            "title": "Added",
+            "type": "integer"
+          },
+          "scheduled": {
+            "title": "Scheduled",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "added",
+          "skipped",
+          "scheduled"
+        ],
+        "title": "AddLeadsResponse",
+        "type": "object"
+      },
+      "CampaignDetailResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "leads": {
+            "items": {
+              "$ref": "#/components/schemas/LeadResponse"
+            },
+            "title": "Leads",
+            "type": "array"
+          },
+          "mailbox_id": {
+            "format": "uuid",
+            "title": "Mailbox Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "mailbox_id",
+          "steps",
+          "created_at",
+          "leads"
+        ],
+        "title": "CampaignDetailResponse",
+        "type": "object"
+      },
+      "CampaignMetricsResponse": {
+        "properties": {
+          "bounce_rate": {
+            "description": "bounced / contacted",
+            "title": "Bounce Rate",
+            "type": "number"
+          },
+          "bounced": {
+            "title": "Bounced",
+            "type": "integer"
+          },
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "completed": {
+            "description": "Leads that received every step",
+            "title": "Completed",
+            "type": "integer"
+          },
+          "contacted": {
+            "description": "Leads that received at least one step",
+            "title": "Contacted",
+            "type": "integer"
+          },
+          "emails_sent": {
+            "title": "Emails Sent",
+            "type": "integer"
+          },
+          "in_progress": {
+            "description": "Leads pending, scheduled or between steps",
+            "title": "In Progress",
+            "type": "integer"
+          },
+          "leads": {
+            "title": "Leads",
+            "type": "integer"
+          },
+          "replied": {
+            "description": "Leads whose reply was classified, bounces excluded",
+            "title": "Replied",
+            "type": "integer"
+          },
+          "reply_intents": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Reply Intents",
+            "type": "object"
+          },
+          "reply_rate": {
+            "description": "replied / contacted",
+            "title": "Reply Rate",
+            "type": "number"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "leads",
+          "contacted",
+          "emails_sent",
+          "replied",
+          "reply_intents",
+          "bounced",
+          "in_progress",
+          "completed",
+          "reply_rate",
+          "bounce_rate"
+        ],
+        "title": "CampaignMetricsResponse",
+        "type": "object"
+      },
+      "CampaignResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mailbox_id": {
+            "format": "uuid",
+            "title": "Mailbox Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "mailbox_id",
+          "steps",
+          "created_at"
+        ],
+        "title": "CampaignResponse",
+        "type": "object"
+      },
+      "CampaignSummaryResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lead_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Lead Counts",
+            "type": "object"
+          },
+          "mailbox_id": {
+            "format": "uuid",
+            "title": "Mailbox Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "mailbox_id",
+          "steps",
+          "created_at",
+          "lead_counts"
+        ],
+        "title": "CampaignSummaryResponse",
+        "type": "object"
+      },
+      "CreateCampaignRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepRequest"
+            },
+            "minItems": 1,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "steps"
+        ],
+        "title": "CreateCampaignRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LeadResponse": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "next_send_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Send At"
+          },
+          "reply_intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Intent"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "steps_sent": {
+            "title": "Steps Sent",
+            "type": "integer"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Reason"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "state",
+          "steps_sent",
+          "stop_reason",
+          "reply_intent",
+          "next_send_at",
+          "updated_at"
+        ],
+        "title": "LeadResponse",
+        "type": "object"
+      },
+      "MailboxResponse": {
+        "properties": {
+          "daily_send_cap": {
+            "description": "Emails this mailbox may send per UTC day",
+            "title": "Daily Send Cap",
+            "type": "integer"
+          },
+          "email_address": {
+            "title": "Email Address",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "remaining_today": {
+            "title": "Remaining Today",
+            "type": "integer"
+          },
+          "sent_today": {
+            "description": "Emails sent since 00:00 UTC today",
+            "title": "Sent Today",
+            "type": "integer"
+          },
+          "suppressed_addresses": {
+            "description": "Addresses in this workspace that are never mailed again",
+            "title": "Suppressed Addresses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "email_address",
+          "daily_send_cap",
+          "sent_today",
+          "remaining_today",
+          "suppressed_addresses"
+        ],
+        "title": "MailboxResponse",
+        "type": "object"
+      },
+      "RecentEventResponse": {
+        "properties": {
+          "aggregate_id": {
+            "format": "uuid",
+            "title": "Aggregate Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_type",
+          "aggregate_id",
+          "created_at"
+        ],
+        "title": "RecentEventResponse",
+        "type": "object"
+      },
+      "StartCampaignResponse": {
+        "properties": {
+          "scheduled": {
+            "title": "Scheduled",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "scheduled"
+        ],
+        "title": "StartCampaignResponse",
+        "type": "object"
+      },
+      "Step": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "delay_seconds": {
+            "title": "Delay Seconds",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "subject",
+          "body",
+          "delay_seconds"
+        ],
+        "title": "Step",
+        "type": "object"
+      },
+      "StepRequest": {
+        "properties": {
+          "body": {
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "delay_seconds": {
+            "minimum": 0.0,
+            "title": "Delay Seconds",
+            "type": "integer"
+          },
+          "subject": {
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "body",
+          "delay_seconds"
+        ],
+        "title": "StepRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "Workspace": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at"
+        ],
+        "title": "Workspace",
+        "type": "object"
+      },
+      "WorkspaceStateResponse": {
+        "properties": {
+          "db": {
+            "title": "Db",
+            "type": "string"
+          },
+          "inbound_count": {
+            "title": "Inbound Count",
+            "type": "integer"
+          },
+          "intents": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Intents",
+            "type": "object"
+          },
+          "leads": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Leads",
+            "type": "object"
+          },
+          "mailbox_last_sync_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox Last Sync Cursor"
+          },
+          "outbound_count": {
+            "title": "Outbound Count",
+            "type": "integer"
+          },
+          "recent_events": {
+            "items": {
+              "$ref": "#/components/schemas/RecentEventResponse"
+            },
+            "title": "Recent Events",
+            "type": "array"
+          },
+          "send_jobs": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Send Jobs",
+            "type": "object"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "db",
+          "workspace_id",
+          "mailbox_last_sync_cursor",
+          "outbound_count",
+          "inbound_count",
+          "intents",
+          "leads",
+          "send_jobs",
+          "recent_events"
+        ],
+        "title": "WorkspaceStateResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "OutboxLab API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/campaigns": {
+      "get": {
+        "operationId": "list_campaigns",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CampaignSummaryResponse"
+                  },
+                  "title": "Response List Campaigns",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List campaigns with lead counts by state",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "post": {
+        "operationId": "create_campaign",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCampaignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "No mailbox connected to this workspace"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a draft campaign with ordered steps, sent from the workspace mailbox",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}": {
+      "get": {
+        "operationId": "get_campaign",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Campaign not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a campaign with its steps and every lead's state",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/leads": {
+      "post": {
+        "operationId": "add_leads_to_campaign",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddLeadsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddLeadsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Campaign not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add lead email addresses; they are scheduled at once if the campaign is active",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/metrics": {
+      "get": {
+        "operationId": "get_campaign_metrics",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignMetricsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Campaign not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a campaign's sending, reply and bounce numbers",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/start": {
+      "post": {
+        "operationId": "start_campaign",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartCampaignResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Campaign not found"
+          },
+          "422": {
+            "description": "The campaign has no leads to start"
+          }
+        },
+        "summary": "Start a campaign: schedule the first step for every pending lead (idempotent)",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/debug/state": {
+      "get": {
+        "operationId": "get_workspace_state",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Workspace counters, mailbox sync cursor and the latest outbox events"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/mailboxes": {
+      "get": {
+        "operationId": "list_mailboxes",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MailboxResponse"
+                  },
+                  "title": "Response List Mailboxes",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List the workspace's connected mailboxes with today's sending volume",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/version": {
+      "get": {
+        "operationId": "version_version_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Version Version Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Version"
+      }
+    },
+    "/workspaces/me": {
+      "get": {
+        "operationId": "get_my_workspace_workspaces_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get My Workspace"
+      }
+    }
+  }
+}

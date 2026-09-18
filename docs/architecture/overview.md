@@ -24,6 +24,10 @@ Rules:
 - **Entrypoints are composition roots**, not contexts. They wire handlers from several contexts and own the process lifecycle. Per-context HTTP routes stay inside the context.
 - **No code for future use.** A port, helper or table exists only when something calls it today.
 
+## Web console
+
+`apps/web` is a Next.js app that sits in front of the API as a backend-for-frontend ([ADR 0021](../adr/0021-nextjs-web-console.md)). The browser talks only to the Next.js server; Server Components read and Server Actions write through a typed client generated from `contracts/openapi/api-v1.json`. The workspace API key lives in an HttpOnly cookie. The app mirrors the API's layering idea on the front end with Feature-Sliced Design: `shared → entities → features → app`, lower layers never importing higher ones.
+
 ## Bounded contexts today
 
 | Context | Owns | State |

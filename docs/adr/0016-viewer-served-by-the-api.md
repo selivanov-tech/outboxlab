@@ -1,6 +1,6 @@
 # ADR 0016 — The state viewer is a static page served by the API
 
-**Status:** accepted (Step 4)
+**Status:** superseded by [ADR 0021](0021-nextjs-web-console.md) (Step 8): the operator UI is now the Next.js console. The `/viewer` page stays until the console is deployed.
 
 ## Context
 

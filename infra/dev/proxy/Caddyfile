@@ -1,5 +1,5 @@
 # Local HTTPS reverse proxy.
-# The hostname comes from API_DOMAIN in .env (gitignored).
+# Hostnames come from API_DOMAIN / WEB_DOMAIN in .env (gitignored).
 # Certs come from `make certs` (mkcert).
 
 {
@@ -9,4 +9,9 @@
 {$API_DOMAIN} {
 	tls /certs/local.pem /certs/local-key.pem
 	reverse_proxy api:8000
+}
+
+{$WEB_DOMAIN} {
+	tls /certs/local.pem /certs/local-key.pem
+	reverse_proxy web:3000
 }
