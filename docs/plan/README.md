@@ -27,6 +27,22 @@ Anything that does not strengthen that path goes to the [parking lot](#parking-l
 
 Each step ships as one pull request titled `Step N: …`. The PR description links back to the step page, so the page is the place to read what the step was for.
 
+## Current status (2026-09-18)
+
+**In `main` and deployed:** Steps 0–7. The API runs on fly.io with migrations up to `0006`; `/health`, `/version`, `/metrics`, `/mcp/` and the legacy `/viewer/` answer. In production the API accepts only workspace API keys.
+
+**Built, in review:** Step 8, the web console (`apps/web`), with CI green.
+
+**Not verified live yet.** Everything below needs real Gmail credentials and is done by hand; until then these paths are covered by tests with fake Gmail and LLM adapters only:
+
+- the send → reply → classify → pause loop against a real mailbox (the success signal of Steps 2 and 3);
+- bounce detection on a real delivery-status notification (tested on fixtures shaped like Gmail's);
+- the LLM classifier against a real provider key (production currently runs the deterministic rules).
+
+**Deployed by hand, not by CI:** the worker (`make deploy-worker`; without it nothing is sent or received in production), the web console (`make deploy-web`), and the optional Go sender, which has no production path yet because its internal route is disabled in production.
+
+**Next, in order:** merge Step 8 → deploy the web console → remove `/viewer/` from the API → connect a mailbox in production (worker secrets, `seed`) → first live campaign run → demo recordings (console, MCP).
+
 ## Cut list and degrade paths
 
 **Not cut before the demo:** real Gmail send, reply detection, reply → classified intent → lead paused, a live URL, README v1.
